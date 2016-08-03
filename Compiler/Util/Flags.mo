@@ -1483,7 +1483,7 @@ constant ConfigFlag SHOW_STRUCTURAL_ANNOTATIONS = CONFIG_FLAG(128, "showStructur
 
 constant ConfigFlag GEN_ADOLC_TRACE = CONFIG_FLAG(125, "adolcTrace",
   NONE(), INTERNAL(), BOOL_FLAG(false), NONE(),
-  Util.gettext("Generate ADOL-C ascii trace file. Dummy flag for development branch newPrototypeAdolc"));
+  Util.gettext("Generate ADOL-C ascii trace file."));
 
 protected
 // This is a list of all configuration flags. A flag can not be used unless it's

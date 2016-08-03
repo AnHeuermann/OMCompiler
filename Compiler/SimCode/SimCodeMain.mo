@@ -71,6 +71,7 @@ import CodegenFMU;
 import CodegenFMUCpp;
 import CodegenFMUCppHpcom;
 import CodegenAdevs;
+import CodegenADOLC;
 import CodegenSparseFMI;
 import CodegenCSharp;
 import CodegenCpp;
@@ -524,6 +525,12 @@ algorithm
         codegenFuncs := (function runToBoolean(func=function SerializeInitXML.simulationInitFileReturnBool(simCode=simCode, guid=guid))) :: codegenFuncs;
         dumpTaskSystemIfFlag(simCode);
         codegenFuncs := (function runTpl(func=function CodegenC.translateModel(in_a_simCode=simCode))) :: codegenFuncs;
+
+        // ADOLC trace generation
+        if Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then
+          codegenFuncs := (function runTpl(func=function CodegenADOLC.generateAdolcAsciiTrace(in_a_simCode=simCode))) :: codegenFuncs;
+        end if;
+
         for f in {
           // external objects
           (CodegenC.simulationFile_exo, "_01exo.c"),

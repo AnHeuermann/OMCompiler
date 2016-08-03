@@ -378,6 +378,7 @@ if true then /* Suppress output */
     "../SimCode/ReduceDAE.mo",
 
     "../Template/CodegenAdevs.mo",
+    "../Template/CodegenADOLC.mo",
     "../Template/CodegenC.mo",
     "../Template/CodegenEmbeddedC.mo",
     "../Template/CodegenCppCommon.mo",
