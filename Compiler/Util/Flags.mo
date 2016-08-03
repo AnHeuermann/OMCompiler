@@ -1481,6 +1481,10 @@ constant ConfigFlag SHOW_STRUCTURAL_ANNOTATIONS = CONFIG_FLAG(128, "showStructur
   NONE(), EXTERNAL(), BOOL_FLAG(false), NONE(),
   Util.gettext("Show annotations affecting the solution process in the flattened code."));
 
+constant ConfigFlag GEN_ADOLC_TRACE = CONFIG_FLAG(125, "adolcTrace",
+  NONE(), INTERNAL(), BOOL_FLAG(false), NONE(),
+  Util.gettext("Generate ADOL-C ascii trace file. Dummy flag for development branch newPrototypeAdolc"));
+
 protected
 // This is a list of all configuration flags. A flag can not be used unless it's
 // in this list, and the list is checked at initialization so that all flags are
@@ -1613,7 +1617,8 @@ constant list<ConfigFlag> allConfigFlags = {
   EVAL_LOOP_LIMIT,
   EVAL_RECURSION_LIMIT,
   SINGLE_INSTANCE_AGLSOLVER,
-  SHOW_STRUCTURAL_ANNOTATIONS
+  SHOW_STRUCTURAL_ANNOTATIONS,
+  GEN_ADOLC_TRACE
 };
 
 public function new
