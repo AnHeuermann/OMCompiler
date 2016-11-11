@@ -83,6 +83,16 @@ constant Integer strongComponent_index = 24;
 // class extends
 constant Integer classExtends_index = 25;
 
+// adolc tmp ticks 
+constant Integer adolc_tmp_indx = 25;
+// adolc ind ticks
+constant Integer adolc_ind_indx = 26;
+// adolc dep ticks
+constant Integer adolc_dep_indx = 27;
+// adolc param ticks
+constant Integer adolc_param_indx = 28;
+
+
 // ----------------------
 
 public function initialize "Called to initialize global roots (when needed)"
