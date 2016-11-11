@@ -18,6 +18,16 @@ import ExpressionDumpTpl;
   "Generates ADOL-C ascii trace file"
 ::=
   match simCode
+  case simCode as SIMCODE(__) then
+    let text = createAdolcText(simCode)
+    let()=textFile(text, '<%fileNamePrefix%>_adolcAsciiTrace.txt')
+    ""
+  end match 
+end generateAdolcAsciiTrace;
+
+template createAdolcText(SimCode simCode)
+::=
+  match simCode
   case simCode as SIMCODE(modelInfo=MODELINFO(vars=vars as SIMVARS(__),
                                               varInfo=varInfo as VARINFO(__)),
                           odeEquations=odeEquations) then
@@ -27,12 +37,13 @@ import ExpressionDumpTpl;
     let &assign_zero += (vars.stateVars |> var as  SIMVAR(__) =>
             '{ op:assign_d_zero loc:<%index%> }'
     ;separator="\n")
-
+    let &assign_zero += "\n"
     let &assign_zero += (vars.derivativeVars  |> var as SIMVAR(__) =>
-        '{ op:assign_d_zero loc:<%intAdd(varInfo.numStateVars,index)%> }'
+        '{ op:assign_d_zero loc:<%index%> }'
     ;separator="\n")
+    let &assign_zero += "\n"
     let &assign_zero += (vars.algVars  |> var as SIMVAR(__) =>
-        '{ op:assign_d_zero loc:<%intAdd(intMul(2,varInfo.numStateVars),index)%> }'
+        '{ op:assign_d_zero loc:<%index%> }'
     ;separator="\n")
     // states are independent variables
     let assign_ind = ""
@@ -42,30 +53,29 @@ import ExpressionDumpTpl;
     // derivates are dependent variables
     let assign_dep = ""
     let &assign_dep += (vars.derivativeVars  |> var as SIMVAR(__) =>
-        '{ op:assign_dep loc:<%intAdd(varInfo.numStateVars,index)%> }'
+        '{ op:assign_dep loc:<%index%> }'
     ;separator="\n")
     
     let()= System.tmpTickResetIndex(0,28) /* reset ind index */
     let tickMax25 = System.tmpTickIndexReserve(28, System.tmpTickMaximum(25))
     
-    let equations = createEquations(odeEquations)
     
     let death_not = '{ op:death_not loc:0 loc:<%System.tmpTickMaximum(28)%> }'
-    
-    let text = assign_zero + assign_ind + equations + assign_dep + death_not
-    let()=textFile(text, '<%fileNamePrefix%>_adolcAsciiTrace.txt')
     <<
-    // ADOLC trace file in ascii format
-    // states are independent variables
+    // allocation of used variables
     <%assign_zero%>
-    // states are independent variables
+    // define independent
     <%assign_ind%>
-    // derivates are dependent variables
+    // operations
+    <%%>
+    // define depenpendent
     <%assign_dep%>
+    // death_not
+    <%death_not%>
     >>
   end match
-end generateAdolcAsciiTrace;
-
+end createAdolcText;
+/*
 template createEquations(list<list<SimEqSystem>> eqs)
 " create adolc equations operations"
 ::=
@@ -87,7 +97,7 @@ template handle_equation(SimEqSystem eq)
     let rhs = expLoc(exp, tmpOps)
   <<
   <%tmpOps%>
-  <%lhs%> = <%rhs%>
+  { op:assign_a <%rhs%> <%lhs%> }
   >>
   end match
 end handle_equation;
@@ -100,21 +110,50 @@ template crefLoc(ComponentRef cref, Text &tmpOps)
     case CREF_IDENT(ident = "time") then
       let timeLoc = System.tmpTickIndex(28)
       let &tmpOps += '{ op:assign_p loc:0 loc:<%timeLoc%> }'
-      '<loc:<%timeLoc%>>'
+      'loc:<%timeLoc%>'
     else match cref2simvar(cref, getSimCode())
       case SIMVAR(varKind=PARAM()) then
-        "(adouble)getparam(ad" + crefStr(cref) + ")"
-      else
-        "ad" + crefStr(cref)
+        let &tmpOps += '{ op:assign_p loc:<%index%> loc:<%System.tmpTickIndex(25)%> }'
+        ""
+      case SIMVAR(__) then
+       'loc:<%index%>'
       end match
   end match
 end crefLoc;
 
+template binaryOps(DAE.Operator op, Text isActive1)
+"get operator string"
+::=
+    match op
+    case ADD() then
+      "plus_"+isActive+"_a"
+    case SUB() then
+      "min_"+isActive+"_a"
+    case MUL() then
+      "mult_"+isActive+"_a"
+    case DIV() then
+      "div_"+isActive+"_a"
+    else
+      "not IMPLEMENTED"
+  end match
+end binaryOps;
+
 template expLoc(DAE.Exp exp, Text &tmpOps)
 "get exp location for adolc cref"
 ::=
-  ""
+    match exp
+    case CREF(componentRef = cref) then
+      let creflocation = crefLoc(cref, tmpOps)
+      '<%creflocation%>'
+    case BINARY(exp1 = exp1, operator = op, exp2 = exp2) then
+      let exp1 = expLoc(exp1, tmpOps)
+      let exp2 = expLoc(exp1, tmpOps)
+      let type = get
+      let ops = binaryOps(op, type)
+      '{ op:<%ops%> <%exp1%> <%exp2%> }'
+  end match
 end expLoc;
+*/
 
 annotation(__OpenModelica_Interface="backend");
 end CodegenADOLC;

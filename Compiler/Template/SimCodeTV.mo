@@ -402,6 +402,7 @@ package SimCode
       Option<DaeModeData> daeModeData;
       list<SimEqSystem> inlineEquations;
       Option<OMSIData> omsiData;
+      Option<OperationData> modelOperationData; /* model operation data for adolc */
     end SIMCODE;
   end SimCode;
 
@@ -765,6 +766,60 @@ end OMSIFunction;
       FmiInitialUnknowns fmiInitialUnknowns;
     end FMIMODELSTRUCTURE;
   end FmiModelStructure;
+
+	public uniontype MathOperator
+	  record ASSIGN_ACTIVE
+	  end ASSIGN_ACTIVE;
+	  record ASSIGN_PARAM
+	  end ASSIGN_PARAM;
+	  record ASSIGN_PASSIVE
+	  end ASSIGN_PASSIVE;
+	  record PLUS
+	    Boolean isActive;
+	  end PLUS
+	  record MINUS
+	    Boolean isActive;
+	  end MINUS;
+	  record MUL
+	    Boolean isActive;
+	  end MUL;
+	  record DIV
+	    Boolean isActive;
+	  end DIV;
+	  record POW
+	    Boolean isActive;
+	  end POW;
+	  record UNARY_NEG
+	  end UNARY_NEG;
+	  record UNARY_CALL
+	    Absyn.Path path;
+	  end UNARY_CALL;
+	end MathOperator;
+	
+	public uniontype Operand
+	  record OPERAND_VAR
+	    SimVar variable;
+	  end OPERAND_VAR
+	  record OPERAND_CONST
+	    DAE.Exp const;
+	  end OPERAND_CONST
+	end Operand;
+	
+	public uniontype Operation
+	  record OPERATION
+	    list<Operand> operands;
+	    MathOperator operator;
+	    Operand result;
+	  end OPERATION
+	end Operation;
+	
+	public uniontype OperationData
+	  record OPERATIONDATA
+	    list<Operation> operations;
+	  end OPERATIONDATA;
+	end OperationData;
+
+end SimCode;
 
 end SimCode;
 
