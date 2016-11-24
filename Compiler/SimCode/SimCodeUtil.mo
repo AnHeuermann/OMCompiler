@@ -597,6 +597,27 @@ algorithm
       crefToSimVarHT := List.fold(inlineSimKnVars,HashTableCrefSimVar.addSimVarToHashTable,crefToSimVarHT);
     end if;
 
+    // create model operation data for adolc
+    if  Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then
+      modelOperationData := createOperationData(odeEquations, crefToSimVarHT);
+    else
+      modelOperationData := NONE();
+    end if;
+    if debug then execStat("simCode: ADOLC createOperationData"); end if;
+
+    // add residuals vars from DAE creation
+    if Flags.getConfigEnum(Flags.DAE_MODE)>1 then
+      daeModeSP := createDaeModeSparsePattern(bdaeModeVars, bdaeModeEqns, shared, crefToSimVarHT);
+
+      residualVars := rewriteIndex(residualVars, 0);
+      crefToSimVarHT:= List.fold(residualVars,addSimVarToHashTable,crefToSimVarHT);
+    algebraicVars := sortSimVarsAndWriteIndex(algebraicVars, crefToSimVarHT);
+      daeModeConf := match Flags.getConfigEnum(Flags.DAE_MODE) case 2 then SimCode.ALL_EQUATIONS(); case 3 then SimCode.DYNAMIC_EQUATIONS(); end match;
+      daeModeData := SOME(SimCode.DAEMODEDATA(daeEquations, daeModeSP, residualVars, algebraicVars, daeModeConf));
+    else
+      daeModeData := NONE();
+    end if;
+
     if Flags.getConfigBool(Flags.CALCULATE_SENSITIVITIES) then
       tmpSimVars := modelInfo.vars;
       (sensitivityVars, countSenParams) := createSimVarsForSensitivities(tmpSimVars.stateVars, tmpSimVars.paramVars, numberofFixedParameters);
