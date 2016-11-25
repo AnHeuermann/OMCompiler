@@ -57,11 +57,14 @@ import Debug;
 import Error;
 import ErrorExt;
 import ExecStat;
+import Expression;
 import ExpressionDump;
 import Flags;
+import TaskSystemDump;
+import SimCodeUtil;
 import System;
 import Util;
-import SimCodeUtil;
+
 
 
 
@@ -86,12 +89,11 @@ public uniontype MathOperator
     Boolean isActive;
   end DIV;
   record POW
-    Boolean isActive;
   end POW;
   record UNARY_NEG
   end UNARY_NEG;
   record UNARY_CALL
-    Absyn.Path path;
+    Absyn.Ident ident;
   end UNARY_CALL;
 end MathOperator;
 
@@ -126,25 +128,41 @@ public function createOperationData
   output Option<OperationData> outOperationData;
 protected
   list<Operation> operations;
+  constant Boolean debug = true;
 algorithm
   try
     operations := {};
+    if debug then
+      print("createOperationData equations input: \n");
+      print(Tpl.tplString3(TaskSystemDump.dumpEqs, inEquations, 0, false));
+    end if;
     for eq in inEquations loop
       () := matchcontinue eq
       local
         Integer index;
         DAE.Exp exp;
         DAE.ComponentRef cref;
+        list<Operation> rest;
         Operation op;
         list<Operand> operands;
-        Operand assignOperand;
+        Operand assignOperand, simVarOperand;
         SimCodeVar.SimVar simVar;
         case SimCode.SES_SIMPLE_ASSIGN(index = index, exp = exp, cref = cref) equation
           //operands = {};
-          (assignOperand, operations) = collectOperationsForExp(exp, crefToSimVarHT, operations, 0);
           simVar = BaseHashTable.get(cref, crefToSimVarHT);
-          op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), OPERAND_VAR(simVar));
-          operations = op::operations;
+          simVarOperand = OPERAND_VAR(simVar);
+          (assignOperand, operations) = collectOperationsForExp(exp, crefToSimVarHT, operations, 0);
+          //print("Done with collectOperationsForExp\n");
+          if isTmpOperand(assignOperand) then
+            op::rest = operations;
+            op = replaceOperationResult(op, simVarOperand);
+            operations = op::rest;
+          else
+            op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+            operations = op::operations;
+          end if;
+
+
         then ();
         //else ();
       end matchcontinue;
@@ -178,24 +196,54 @@ algorithm
       DAE.ComponentRef cref;
       SimCode.HashTableCrefToSimVar crefToSimVarHT;
       SimCodeVar.SimVar resVar;
-      list<Operand> opds;
+      list<Operand> opds, rest;
       list<Operation> ops;
       Operation operation;
       Operand result;
       DAE.Exp e1,e2;
+      DAE.Type ty;
       DAE.Operator op;
       Integer tmpIndex;
+      Operand opd1, opd2;
+      Absyn.Ident ident;
+      String str;
+
+    case (e1 as DAE.RCONST(), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+      opds = OPERAND_CONST(e1)::opds;
+    then
+      (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
+
     case (DAE.CREF(componentRef=cref), (opds, ops, tmpIndex, crefToSimVarHT)) equation
       resVar = BaseHashTable.get(cref, crefToSimVarHT);
       opds = OPERAND_VAR(resVar)::opds;
     then
       (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
 
-    case (DAE.BINARY(_, op, _), (opds, ops, tmpIndex, crefToSimVarHT)) equation
-      (operation, result, tmpIndex) = createBinaryOperation(op, opds, tmpIndex);
+    case (DAE.BINARY(operator = op), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+      opd2::opd1::rest = opds;
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd2}, tmpIndex);
       ops = operation::ops;
     then
-      (inExp, ({result}, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+
+    case (DAE.CALL(path=Absyn.IDENT("DIVISION"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+      op = DAE.DIV(ty);
+      opd2::opd1::rest = opds;
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd2}, tmpIndex);
+      ops = operation::ops;
+    then
+      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+
+    case (DAE.CALL(path=Absyn.IDENT(ident), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT))
+      guard isMathFunction(ident)
+    equation
+      opd1::rest = opds;
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      result = OPERAND_VAR(resVar);
+      operation = OPERATION({opd1}, UNARY_CALL(ident), result);
+      ops = operation::ops;
+    then
+      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
 
     else
       (inExp, inTpl);
@@ -204,7 +252,7 @@ end collectOperation;
 
 protected function createBinaryOperation
   input DAE.Operator operator;
-  input list<Operand> opds;
+  input list<Operand> inOpds;
   input Integer inIndex;
   output Operation op;
   output Operand result;
@@ -214,20 +262,48 @@ algorithm
   local
     SimCodeVar.SimVar resVar;
     DAE.Type ty;
+    list<Operation> extraOps;
+    Boolean isActive, isCommuted;
+    Operand opd1, opd2;
+    list<Operand> opds;
+    DAE.Exp exp;
     case DAE.ADD(ty) equation
       (resVar, outIndex) = createSimTmpVar(inIndex, ty);
       result = OPERAND_VAR(resVar);
-      op = OPERATION(opds, PLUS(true), result);
+      (opds, extraOps, isActive, isCommuted) = checkOperand(inOpds);
+      op = OPERATION(opds, PLUS(isActive), result);
     then ();
     case DAE.SUB(ty) equation
+      //print("Start SUB\n");
       (resVar, outIndex) = createSimTmpVar(inIndex, ty);
       result = OPERAND_VAR(resVar);
-      op = OPERATION(opds, MINUS(true), result);
+      (opds, extraOps, isActive, isCommuted) = checkOperand(inOpds);
+      //print("done with checkOperands isCommuted: " + boolString(isCommuted) + " isActive: " + boolString(isActive) + "\n");
+      if not isCommuted then
+        op = OPERATION(opds, MINUS(isActive), result);
+      else
+        (opd1 as OPERAND_CONST(exp))::opd2::{} = opds;
+        op = OPERATION({OPERAND_CONST(Expression.negate(exp)), opd2}, PLUS(isActive), result);
+      end if;
     then ();
     case DAE.MUL(ty) equation
       (resVar, outIndex) = createSimTmpVar(inIndex, ty);
       result = OPERAND_VAR(resVar);
-      op = OPERATION(opds, MUL(true), result);
+      (opds, extraOps, isActive, isCommuted) = checkOperand(inOpds);
+      op = OPERATION(opds, MUL(isActive), result);
+    then ();
+    case DAE.DIV(ty) equation
+      //print("Start DIV\n");
+      (resVar, outIndex) = createSimTmpVar(inIndex, ty);
+      result = OPERAND_VAR(resVar);
+      (opds, extraOps, isActive, isCommuted) = checkOperand(inOpds);
+      //print("done with checkOperands\n");
+      if not isCommuted then
+        op = OPERATION(opds, DIV(isActive), result);
+      else
+        (opd1 as OPERAND_CONST(exp))::opd2::{} = opds;
+        op = OPERATION({OPERAND_CONST(Expression.invertReal(exp)), opd2}, MUL(isActive), result);
+      end if;
     then ();
     else
       fail();
@@ -247,6 +323,81 @@ algorithm
   nextInt := inIndex + 1;
 end createSimTmpVar;
 
+protected function checkOperand
+  input list<Operand> inOpds;
+  output list<Operand> outOpds;
+  output list<Operation> extraOps = {};
+  output Boolean isActive;
+  output Boolean isCommuted;
+protected
+  Operand opd1, opd2;
+algorithm
+  opd1::opd2::{} := inOpds;
+  _ := match(opd1, opd2)
+
+    case (OPERAND_CONST(_), OPERAND_VAR(_)) equation
+      outOpds = inOpds;
+      isActive = false;
+      isCommuted = false;
+    then ();
+
+    case (OPERAND_VAR(_), OPERAND_CONST(_)) equation
+      outOpds = {opd2,opd1};
+      isActive = false;
+      isCommuted = true;
+    then ();
+
+    case (OPERAND_VAR(_), OPERAND_VAR(_)) equation
+      outOpds = inOpds;
+      isActive = true;
+      isCommuted = false;
+    then ();
+
+  end match;
+end checkOperand;
+
+protected function isTmpOperand
+  input Operand inOperand;
+  output Boolean outBoolean;
+algorithm
+  outBoolean := matchcontinue inOperand
+  local
+    SimCodeVar.SimVar simVar;
+    case OPERAND_VAR(simVar as SimCodeVar.SIMVAR()) equation
+      BackendDAE.TMP_SIMVAR() = simVar.varKind;
+    then true;
+
+    else false;
+  end matchcontinue;
+end isTmpOperand;
+
+protected function replaceOperationResult
+  input Operation inOp;
+  input Operand inOpd;
+  output Operation outOp = inOp;
+algorithm
+  try
+    outOp.result := inOpd;
+  else
+    print(" function replaceOperationResult failed\n");
+  end try;
+end replaceOperationResult;
+
+
+protected function isMathFunction
+  input String inName;
+  output Boolean outBool;
+protected
+  list<String> mathOps = {"sin", "cos", "exp", "log", "sqrt", "asin", "acos", "asinh", "acosh", "atanh"};
+algorithm
+  outBool := false;
+  for op in mathOps loop
+    if stringCompare(op, inName) == 0 then
+      outBool := true;
+      break;
+    end if;
+  end for;
+end isMathFunction;
 
 ///////////////////////
 /* Dumping functions */
@@ -307,7 +458,7 @@ protected function printOperatorStr
 algorithm
   outString := match inOp
   local
-    Absyn.Path path;
+    Absyn.Ident ident;
     Boolean b;
     case ASSIGN_ACTIVE()
     then "ASSIGN_ACTIVE";
@@ -330,14 +481,14 @@ algorithm
     case DIV(b)
     then "DIV" + (if b then "_ACTIVE" else "_PASSIVE");
 
-    case POW(b)
-    then "POW" + (if b then "_ACTIVE" else "_PASSIVE");
+    case POW()
+    then "POW";
 
     case UNARY_NEG()
     then "UNARY_NEG";
 
-    case UNARY_CALL(path)
-    then "UNARY" + Absyn.pathString(path);
+    case UNARY_CALL(ident)
+    then "UNARY_CALL_" + ident;
 
   end match;
 end printOperatorStr;

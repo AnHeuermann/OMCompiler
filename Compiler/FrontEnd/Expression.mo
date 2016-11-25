@@ -687,6 +687,26 @@ algorithm
   outNegatedReal := DAE.UNARY(DAE.UMINUS(DAE.T_REAL_DEFAULT), inReal);
 end negateReal;
 
+public function invertReal
+  input DAE.Exp inExp;
+  output DAE.Exp outExp;
+algorithm
+  outExp := match(inExp)
+  local
+     Integer i;
+     Real r;
+    case (DAE.ICONST(i))
+    equation
+      r = 1 / i;
+    then DAE.RCONST(r);
+    case (DAE.RCONST(r))
+      equation
+        r = 1.0 / r;
+      then DAE.RCONST(r);
+    else fail();
+  end match;
+end invertReal;
+
 public function expand "expands products
 For example
 a *(b+c) => a*b + a*c"
