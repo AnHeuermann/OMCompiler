@@ -30,7 +30,7 @@ template createAdolcText(SimCode simCode)
   match simCode
   case simCode as SIMCODE(modelInfo=MODELINFO(vars=vars as SIMVARS(__),
                                               varInfo=varInfo as VARINFO(__)),
-                          odeEquations=odeEquations) then
+                          modelOperationData=modelOperationData) then
     let()= System.tmpTickResetIndex(0,25) /* reset tmp index */
     // states are independent variables
     let assign_zero = ""
