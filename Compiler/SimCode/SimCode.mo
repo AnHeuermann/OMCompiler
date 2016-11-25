@@ -62,7 +62,7 @@ import HashTableCrefSimVar;
 import HpcOmSimCode;
 import SimCodeFunction;
 import SimCodeVar;
-import MathOperations;
+import MathOperation;
 import SCode;
 
 type ExtConstructor = tuple<DAE.ComponentRef, String, list<DAE.Exp>>;
@@ -155,7 +155,8 @@ uniontype SimCode
     Option<DaeModeData> daeModeData;
     list<SimEqSystem> inlineEquations;
     Option<OMSIData> omsiData "used for OMSI to generate equations code";
-    Option<OperationData> modelOperationData "model operation data for adolc";
+    Option<MathOperation.OperationData> modelOperationData "model operation data for adolc"; 
+
   end SIMCODE;
 end SimCode;
 

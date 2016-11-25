@@ -370,6 +370,7 @@ if true then /* Suppress output */
     "../Script/CevalScriptBackend.mo",
 
     "../SimCode/HpcOmSimCodeMain.mo",
+    "../SimCode/MathOperation.mo",
     "../SimCode/SerializeInitXML.mo",
     "../SimCode/SerializeModelInfo.mo",
     "../SimCode/SimCode.mo",

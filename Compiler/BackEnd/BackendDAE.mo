@@ -291,6 +291,8 @@ uniontype VarKind "variable kind"
   end LOOP_ITERATION;
   record LOOP_SOLVED      "used in SIMCODE, inner variables of a torn algebraic loop"
   end LOOP_SOLVED;
+  record TMP_SIMVAR       "variable kind used for tmp SimCodeVars"
+  end TMP_SIMVAR;
 end VarKind;
 
 public uniontype TearingSelect

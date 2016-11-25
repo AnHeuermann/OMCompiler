@@ -101,6 +101,7 @@ import HashTableSimCodeEqCache;
 import HpcOmSimCode;
 import Inline;
 import List;
+import MathOperation;
 import Matching;
 import MetaModelica.Dangerous;
 import Mutable;
@@ -288,6 +289,8 @@ protected
   Option<SimCode.OMSIData> omsiOptData;
 
   constant Boolean debug = false;
+
+  Option<MathOperation.OperationData> modelOperationData;
 algorithm
   try
     execStat("Backend phase and start with SimCode phase");
@@ -599,7 +602,8 @@ algorithm
 
     // create model operation data for adolc
     if  Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then
-      modelOperationData := createOperationData(odeEquations, crefToSimVarHT);
+      modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations), crefToSimVarHT);
+      MathOperation.dumpOperationData(modelOperationData);
     else
       modelOperationData := NONE();
     end if;
@@ -737,7 +741,8 @@ algorithm
                               SimCode.emptyPartitionData,
                               NONE(),
                               inlineEquations,
-                              omsiOptData
+                              omsiOptData,
+                              modelOperationData
                               );
 
     (simCode, (_, _, lits)) := traverseExpsSimCode(simCode, SimCodeFunctionUtil.findLiteralsHelper, literals);
@@ -12335,6 +12340,18 @@ author:Waurich TUD 2014-05"
 algorithm
   simVarOut.index := idx;
 end replaceSimVarIndex;
+
+public function makeTmpRealSimCodeVar
+  input DAE.ComponentRef inName;
+  input BackendDAE.VarKind inVarKind;
+  input Integer index = -1;
+  output SimCodeVar.SimVar outSimVar;
+algorithm
+  outSimVar := SimCodeVar.SIMVAR(inName, inVarKind, "", "", "", index,
+      NONE(), NONE(), NONE(), NONE(), false, DAE.T_REAL_DEFAULT,
+      false, NONE(), SimCodeVar.NOALIAS(), DAE.emptyElementSource,
+      SimCodeVar.NONECAUS(), NONE(), {}, false, false, false, NONE());
+end makeTmpRealSimCodeVar;
 
 public function addSimVarToAlgVars
   input SimCodeVar.SimVar simVar;
