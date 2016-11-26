@@ -31,7 +31,12 @@ template createAdolcText(SimCode simCode)
   case simCode as SIMCODE(modelInfo=MODELINFO(vars=vars as SIMVARS(__),
                                               varInfo=varInfo as VARINFO(__)),
                           modelOperationData=modelOperationData) then
-    let()= System.tmpTickResetIndex(0,25) /* reset tmp index */
+    let maxTmpIndex = match modelOperationData
+                      case SOME(operationData as
+                                OPERATIONDATA(maxTmpIndex=maxTmpIndex)) then
+                         '<%maxTmpIndex%>'
+                      end match
+    //let()= System.tmpTickResetIndex(0,25) /* reset tmp index */
     // states are independent variables
     let assign_zero = ""
     let &assign_zero += (vars.stateVars |> var as  SIMVAR(__) =>
@@ -56,18 +61,27 @@ template createAdolcText(SimCode simCode)
         '{ op:assign_dep loc:<%index%> }'
     ;separator="\n")
     
-    let()= System.tmpTickResetIndex(0,28) /* reset ind index */
-    let tickMax25 = System.tmpTickIndexReserve(28, System.tmpTickMaximum(25))
+    //let()= System.tmpTickResetIndex(0,28) /* reset ind index */
+    //let tickMax25 = System.tmpTickIndexReserve(28, System.tmpTickMaximum(25))
     
     
-    let death_not = '{ op:death_not loc:0 loc:<%System.tmpTickMaximum(28)%> }'
+    let death_not = '{ op:death_not loc:0 loc:<%maxTmpIndex%> }'
+    let operations = match modelOperationData
+                      case SOME(operationData as
+                                OPERATIONDATA(operations=operations)) then
+                      let opsText = ""
+                      let &opsText += (operations |> op as OPERATION(__)
+                                       => createOperatorText(op)
+                                       ;separator="\n")
+                      '<%opsText%>'
+                    end match
     <<
     // allocation of used variables
     <%assign_zero%>
     // define independent
     <%assign_ind%>
     // operations
-    <%%>
+    <%operations%>
     // define depenpendent
     <%assign_dep%>
     // death_not
@@ -75,6 +89,26 @@ template createAdolcText(SimCode simCode)
     >>
   end match
 end createAdolcText;
+
+template createOperatorText(MathOperation.Operation op)
+::= match op
+    case OPERATION(operator=operator,operands=operands,result=result) then
+    let operStr = MathOperation.printOperatorStr(operator)
+    let locsStr = ""
+    let &locsStr += (operands |> opd as OPERAND_VAR(variable=variable as SimCodeVar.SIMVAR(index=index)) => 'loc:<%index%> ')
+    let &locsStr += match result
+                    case OPERAND_VAR(variable=variable as
+                                     SimCodeVar.SIMVAR(index=index)) then
+                    'loc:<%index%>'
+                    end match
+    let valStr = ""
+    let &valStr += (operands |> opd as OPERAND_CONST(const=const)
+                    => 'val:<%ExpressionDumpTpl.dumpExp(const,"")%> ')
+    <<{ op:<%operStr%> <%locsStr%> <%valStr%>}>>
+    else
+    <<>>
+    end match
+end createOperatorText;
 
 annotation(__OpenModelica_Interface="backend");
 end CodegenADOLC;

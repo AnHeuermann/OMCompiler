@@ -117,6 +117,7 @@ end Operation;
 public uniontype OperationData
   record OPERATIONDATA
     list<Operation> operations;
+    Integer maxTmpIndex;
   end OPERATIONDATA;
 end OperationData;
 
@@ -125,13 +126,19 @@ end OperationData;
 public function createOperationData
   input list<SimCode.SimEqSystem> inEquations;
   input SimCode.HashTableCrefToSimVar crefToSimVarHT;
+  input SimCodeVar.SimVars vars;
   output Option<OperationData> outOperationData;
 protected
   list<Operation> operations;
   constant Boolean debug = true;
+  Integer numVar;
+  Integer maxTmpIndex;
+  Integer tmpIndex;
 algorithm
   try
     operations := {};
+    numVar := listLength(vars.stateVars) + listLength(vars.derivativeVars) + listLength(vars.algVars);
+    maxTmpIndex := numVar;
     if debug then
       print("createOperationData equations input: \n");
       print(Tpl.tplString3(TaskSystemDump.dumpEqs, inEquations, 0, false));
@@ -151,7 +158,7 @@ algorithm
           //operands = {};
           simVar = BaseHashTable.get(cref, crefToSimVarHT);
           simVarOperand = OPERAND_VAR(simVar);
-          (assignOperand, operations) = collectOperationsForExp(exp, crefToSimVarHT, operations, 0);
+          (assignOperand, operations, tmpIndex) = collectOperationsForExp(exp, crefToSimVarHT, operations, numVar);
           //print("Done with collectOperationsForExp\n");
           if isTmpOperand(assignOperand) then
             op::rest = operations;
@@ -166,9 +173,10 @@ algorithm
         then ();
         //else ();
       end matchcontinue;
+      maxTmpIndex := max(maxTmpIndex,tmpIndex);
     end for;
     operations := listReverse(operations);
-    outOperationData := SOME(OPERATIONDATA(operations));
+    outOperationData := SOME(OPERATIONDATA(operations,maxTmpIndex));
   else
     outOperationData := NONE();
   end try;
@@ -181,8 +189,9 @@ protected function collectOperationsForExp
   input Integer tmpOffset;
   output Operand lastResult;
   output list<Operation> outOps;
+  output Integer maxTmpIndex;
 algorithm
-  (_, ({lastResult}, outOps, _, _)) := Expression.traverseExpBottomUp(inExp,collectOperation,({}, inOps, tmpOffset, crefToSimVarHT));
+  (_, ({lastResult}, outOps, maxTmpIndex, _)) := Expression.traverseExpBottomUp(inExp,collectOperation,({}, inOps, tmpOffset, crefToSimVarHT));
 end collectOperationsForExp;
 
 protected function collectOperation
@@ -452,7 +461,7 @@ algorithm
   end match;
 end printOperandStr;
 
-protected function printOperatorStr
+public function printOperatorStr
   input MathOperator inOp;
   output String outString;
 algorithm
@@ -461,34 +470,34 @@ algorithm
     Absyn.Ident ident;
     Boolean b;
     case ASSIGN_ACTIVE()
-    then "ASSIGN_ACTIVE";
+    then "assign_a";
 
     case ASSIGN_PARAM()
-    then "ASSIGN_PARAM";
+    then "assign_p";
 
     case ASSIGN_PASSIVE()
-    then "ASSIGN_PASSIVE";
+    then "assign_d";
 
     case PLUS(b)
-    then "PLUS" + (if b then "_ACTIVE" else "_PASSIVE");
+    then "plus" + (if b then "_a" else "_d") + "_a";
 
     case MINUS(b)
-    then "MINUS" + (if b then "_ACTIVE" else "_PASSIVE");
+    then "min" + (if b then "_a" else "_d") + "_a";
 
     case MUL(b)
-    then "MUL" + (if b then "_ACTIVE" else "_PASSIVE");
+    then "mult" + (if b then "_a" else "_d") + "_a";
 
     case DIV(b)
-    then "DIV" + (if b then "_ACTIVE" else "_PASSIVE");
+    then "div" + (if b then "_a" else "_d") + "_a";
 
     case POW()
-    then "POW";
+    then "pow_op";
 
     case UNARY_NEG()
-    then "UNARY_NEG";
+    then "neg_sign_a";
 
     case UNARY_CALL(ident)
-    then "UNARY_CALL_" + ident;
+    then ident + "_op";
 
   end match;
 end printOperatorStr;
