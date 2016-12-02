@@ -249,6 +249,14 @@ algorithm
     then
       (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
 
+    case (DAE.CALL(path=Absyn.IDENT("der")), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+      OPERAND_VAR(resVar)::rest = opds;
+      cref = ComponentReference.crefPrefixDer(resVar.name);
+      resVar = BaseHashTable.get(cref, crefToSimVarHT);
+      opds = OPERAND_VAR(resVar)::rest;
+    then
+      (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
+
     case (DAE.BINARY(operator = op), (opds, ops, tmpIndex, crefToSimVarHT)) equation
       opd2::opd1::rest = opds;
       (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd2}, tmpIndex);
@@ -271,6 +279,16 @@ algorithm
       (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1}, UNARY_CALL(ident), result);
+      ops = operation::ops;
+    then
+      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+
+    case (DAE.UNARY(exp=e1), (opds, ops, tmpIndex, crefToSimVarHT))
+    equation
+      opd1::rest = opds;
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, Expression.typeof(e1));
+      result = OPERAND_VAR(resVar);
+      operation = OPERATION({opd1}, UNARY_NEG(), result);
       ops = operation::ops;
     then
       (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
