@@ -804,6 +804,9 @@ const char *JACOBIAN_METHOD[JAC_MAX] = {
   "coloredSymbolical",
   "numerical",
   "symbolical"
+  "adolc",
+
+  "JAC_MAX"
 };
 
 const char *JACOBIAN_METHOD_DESC[JAC_MAX] = {
@@ -814,6 +817,9 @@ const char *JACOBIAN_METHOD_DESC[JAC_MAX] = {
   "Colored symbolical Jacobian. Needs omc compiler flag --generateSymbolicJacobian. With option -idaLS=klu a sparse matrix is used.",
   "Dense numerical Jacobian.",
   "Dense symbolical Jacobian. Needs omc compiler flag --generateSymbolicJacobian.",
+  "adolc",
+
+  "JAC_MAX"
  };
 
 const char *IDA_LS_METHOD[IDA_LS_MAX] = {
