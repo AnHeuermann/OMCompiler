@@ -8749,6 +8749,19 @@ algorithm
   end match;
 end isAliasVar;
 
+public function isSimVarParam
+  input SimCodeVar.SimVar var;
+  output Boolean res;
+algorithm
+  res :=
+  match (var)
+    case (SimCodeVar.SIMVAR(varKind=BackendDAE.PARAM()))
+    then true;
+  else
+    then false;
+  end match;
+end isSimVarParam;
+
 protected function sortSimvars
   input array<list<SimCodeVar.SimVar>> simvars;
 protected

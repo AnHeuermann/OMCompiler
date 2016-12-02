@@ -1044,6 +1044,8 @@ package MathOperation
     record OPERAND_CONST
       DAE.Exp const;
     end OPERAND_CONST;
+    record OPERAND_TIME
+    end OPERAND_TIME;
   end Operand;
 
   uniontype Operation

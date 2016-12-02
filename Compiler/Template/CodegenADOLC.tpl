@@ -93,6 +93,21 @@ end createAdolcText;
 template createOperatorText(MathOperation.Operation op)
 ::= match op
     case OPERATION(operator=operator,operands=operands,result=result) then
+       match operator
+         case ASSIGN_PARAM() then
+             let operStr = 'assign_p'
+             let locsStr = ""
+             let &locsStr += (operands |> opd
+                      as OPERAND_VAR(variable=variable as SimCodeVar.SIMVAR(index=index)) => 'loc:<%intAdd(index,1)%> ')
+             let &locsStr += (operands |> opd as OPERAND_TIME() => 'loc:0')
+             let &locsStr += match result
+                        case OPERAND_VAR(variable=variable as
+                                     SimCodeVar.SIMVAR(index=index)) then
+                        'loc:<%index%>'
+                        end match
+             <<{ op:<%operStr%> <%locsStr%> }>>
+
+         else
     let operStr = MathOperation.printOperatorStr(operator)
     let locsStr = ""
     let &locsStr += (operands |> opd as OPERAND_VAR(variable=variable as SimCodeVar.SIMVAR(index=index)) => 'loc:<%index%> ')

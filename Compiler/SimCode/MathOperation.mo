@@ -104,6 +104,8 @@ public uniontype Operand
   record OPERAND_CONST
     DAE.Exp const;
   end OPERAND_CONST;
+  record OPERAND_TIME
+  end OPERAND_TIME;
 end Operand;
 
 public uniontype Operation
@@ -204,7 +206,7 @@ algorithm
     local
       DAE.ComponentRef cref;
       SimCode.HashTableCrefToSimVar crefToSimVarHT;
-      SimCodeVar.SimVar resVar;
+      SimCodeVar.SimVar resVar, timeVar, paramVar;
       list<Operand> opds, rest;
       list<Operation> ops;
       Operation operation;
@@ -219,6 +221,25 @@ algorithm
 
     case (e1 as DAE.RCONST(), (opds, ops, tmpIndex, crefToSimVarHT)) equation
       opds = OPERAND_CONST(e1)::opds;
+    then
+      (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
+
+    case (DAE.CREF(componentRef=DAE.CREF_IDENT(ident="time"), ty=ty), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      operation = OPERATION({OPERAND_TIME()}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
+      ops = operation::ops;
+      opds = OPERAND_VAR(resVar)::opds;
+    then
+      (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
+
+    case (DAE.CREF(componentRef=cref, ty=ty), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+      paramVar = BaseHashTable.get(cref, crefToSimVarHT);
+      //guard
+      BackendDAE.PARAM() = paramVar.varKind;
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      operation = OPERATION({OPERAND_VAR(paramVar)}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
+      ops = operation::ops;
+      opds = OPERAND_VAR(resVar)::opds;
     then
       (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
 
@@ -457,6 +478,9 @@ algorithm
 
     case OPERAND_CONST(exp)
     then "CONST(" + ExpressionDump.printExpStr(exp) + ") ";
+
+    case OPERAND_TIME()
+    then "TIME";
 
   end match;
 end printOperandStr;
