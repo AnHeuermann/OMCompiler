@@ -656,7 +656,7 @@ if test x$with_adolc != xno ; then
    fi
    if test "x$have_adolc" == "xyes"; then
       AC_DEFINE(HAVE_ADOLC,1,[Defined if ADOL-C library can be used])
-      RT_LDFLAGS_SIM="$RT_LDFLAGS_SIM $ADOLC_LIBS"
+      RT_LDFLAGS="$RT_LDFLAGS $ADOLC_LIBS"
       CPPFLAGS="$CPPFLAGS $ADOLC_CFLAGS"
    fi
 fi
