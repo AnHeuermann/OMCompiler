@@ -645,6 +645,22 @@ AS_IF([test "x$with_ipopt" = xyes],
 
 m4_include([common/m4/corba.m4])
 
+AC_ARG_WITH(adolc-libdir, [ --with-adolc-libdir            Path where ADOL-C library is installed], [with_adolc=$withval],[with_adolc=no])
+
+if test x$with_adolc != xno ; then
+   PKG_PROG_PKG_CONFIG
+   export PKG_CONFIG_PATH="${with_adolc}"/pkgconfig:"$PKG_CONFIG_PATH"
+   PKG_CHECK_MODULES(ADOLC, [adolc], [have_adolc="yes"], [have_adolc="no"])
+   if test "x$have_adolc" == "xno"; then
+           AC_MSG_ERROR("$ADOLC_PKG_ERRORS")
+   fi
+   if test "x$have_adolc" == "xyes"; then
+      AC_DEFINE(HAVE_ADOLC,1,[Defined if ADOL-C library can be used])
+      RT_LDFLAGS_SIM="$RT_LDFLAGS_SIM $ADOLC_LIBS"
+      CPPFLAGS="$CPPFLAGS $ADOLC_CFLAGS"
+   fi
+fi
+
 AC_MSG_CHECKING([for OpenCL])
 AC_CHECK_HEADER([CL/cl.h],[OPENCL="Yes"],[
   AC_CHECK_HEADER([OpenCL/cl.h],[OPENCL="Yes"],[OPENCL="No"])
