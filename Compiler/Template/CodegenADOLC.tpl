@@ -61,11 +61,9 @@ template createAdolcText(SimCode simCode)
         '{ op:assign_dep loc:<%index%> }'
     ;separator="\n")
     
-    //let()= System.tmpTickResetIndex(0,28) /* reset ind index */
-    //let tickMax25 = System.tmpTickIndexReserve(28, System.tmpTickMaximum(25))
-    
-    
+
     let death_not = '{ op:death_not loc:0 loc:<%maxTmpIndex%> }'
+    let num_real_param = '{ op:set_numparam loc:<%varInfo.numParams%> }'
     let operations = match modelOperationData
                       case SOME(operationData as
                                 OPERATIONDATA(operations=operations)) then
@@ -86,6 +84,8 @@ template createAdolcText(SimCode simCode)
     <%assign_dep%>
     // death_not
     <%death_not%>
+    // num real parameters
+    <%num_real_param%>
     >>
   end match
 end createAdolcText;
