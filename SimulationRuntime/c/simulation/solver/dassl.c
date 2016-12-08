@@ -347,18 +347,29 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       break;
     case ADOLC:
       /* alloc adolc */
+
+      if(measure_time_flag)
+      {
+        rt_tick(SIM_TIMER_ADOLC_INIT);
+      }
       dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal)*sizeof(double));
       memcpy(dasslData->adolcParam +1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
 
       sprintf(filename, "%s_adolcAsciiTrace.txt", data->modelData->modelFilePrefix);
-      sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
+      //sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
       read_ascii_trace(filename, 0);
-      tapestats(0,stats);
-      dasslData->adolc_num_params = stats[NUM_PARAM];
-      fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
-      write_ascii_trace(filename2, 0);
+      //tapestats(0,stats);
+      //dasslData->adolc_num_params = stats[NUM_PARAM];
+      //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
+      //write_ascii_trace(filename2, 0);
       dasslData->jacobianFunction =  JacobianADOLC;
+      if(measure_time_flag)
+      {
+        rt_accumulate(SIM_TIMER_ADOLC_INIT);
+        fprintf(stderr, "Time to prepare Adolc Data: %f\n", rt_accumulated(SIM_TIMER_ADOLC_INIT));
+      }
+
       break;
     case INTERNALNUMJAC:
       dasslData->jacobianFunction =  dummy_Jacobian;
@@ -412,6 +423,11 @@ int dassl_deinitial(DASSL_DATA *dasslData)
 {
   TRACE_PUSH
   unsigned int i;
+  if(measure_time_flag)
+  {
+    rt_accumulate(SIM_TIMER_ADOLC_INIT);
+    fprintf(stderr, "Time to calc jacobian: %f\n", rt_accumulated(SIM_TIMER_JACOBIAN));
+  }
 
   /* free work arrays for DASSL */
   free(dasslData->rwork);
@@ -1179,10 +1195,17 @@ static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, d
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
 
   updateTimeParamLoc(dasslData->adolcParam, *t);
-  //if (dasslData->adolc_num_params >= data->modelData->nParametersReal+1)
-  set_param_vec(0, dasslData->adolc_num_params , dasslData->adolcParam);
+  set_param_vec(0, data->modelData->nParametersReal+1 , dasslData->adolcParam);
   printCurrentStatesVector(LOG_JAC, y, data, *t);
+  if(measure_time_flag)
+  {
+    rt_tick(SIM_TIMER_JACOBIAN);
+  }
   jacobian(0, dasslData->N, dasslData->N, y, dasslData->adolcJac);
+  if(measure_time_flag)
+  {
+    rt_accumulate(SIM_TIMER_JACOBIAN);
+  }
 
   /* add cj to diagonal elements and store in pd */
   k = 0;
@@ -1196,6 +1219,7 @@ static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, d
     pd[l] -= (double) *cj;
     l += dasslData->N + 1;
   }
+
 
   /* debug */
   if (ACTIVE_STREAM(LOG_JAC)){
