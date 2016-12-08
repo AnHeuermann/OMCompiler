@@ -98,7 +98,7 @@ template createOperatorText(MathOperation.Operation op)
              let operStr = 'assign_p'
              let locsStr = ""
              let &locsStr += (operands |> opd
-                      as OPERAND_VAR(variable=variable as SimCodeVar.SIMVAR(index=index)) => ' loc:<%intAdd(index,1)%> ')
+                      as OPERAND_VAR(variable=variable as SimCodeVar.SIMVAR(index=index)) => ' loc:<%intAdd(index,1)%>')
              let &locsStr += (operands |> opd as OPERAND_TIME() => ' loc:0')
              let &locsStr += match result
                         case OPERAND_VAR(variable=variable as

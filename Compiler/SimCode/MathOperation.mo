@@ -206,7 +206,7 @@ algorithm
     local
       DAE.ComponentRef cref;
       SimCode.HashTableCrefToSimVar crefToSimVarHT;
-      SimCodeVar.SimVar resVar, timeVar, paramVar;
+      SimCodeVar.SimVar resVar, timeVar, paramVar, extraVar;
       list<Operand> opds, rest;
       list<Operation> ops;
       Operation operation;
@@ -279,6 +279,18 @@ algorithm
       (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1}, UNARY_CALL(ident), result);
+      ops = operation::ops;
+    then
+      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+
+    case (DAE.CALL(path=Absyn.IDENT(ident), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT))
+      guard isTrigMathFunction(ident)
+    equation
+      opd1::rest = opds;
+      (extraVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      result = OPERAND_VAR(resVar);
+      operation = OPERATION({opd1,OPERAND_VAR(extraVar)}, UNARY_CALL(ident), result);
       ops = operation::ops;
     then
       (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
@@ -436,7 +448,7 @@ protected function isMathFunction
   input String inName;
   output Boolean outBool;
 protected
-  list<String> mathOps = {"sin", "cos", "exp", "log", "sqrt", "asin", "acos", "asinh", "acosh", "atanh"};
+  list<String> mathOps = {"exp", "log", "sqrt"};
 algorithm
   outBool := false;
   for op in mathOps loop
@@ -446,6 +458,36 @@ algorithm
     end if;
   end for;
 end isMathFunction;
+
+protected function isTrigMathFunction
+  input String inName;
+  output Boolean outBool;
+protected
+  list<String> mathOps = {"sin", "cos", "asin", "acos", "asinh", "acosh", "atanh"};
+algorithm
+  outBool := false;
+  for op in mathOps loop
+    if stringCompare(op, inName) == 0 then
+      outBool := true;
+      break;
+    end if;
+  end for;
+end isTrigMathFunction;
+
+protected function isTransformingMathFunction
+  input String inName;
+  output Boolean outBool;
+protected
+  list<String> mathOps = {"tan","sinh","cosh","tanh"};
+algorithm
+  outBool := false;
+  for op in mathOps loop
+    if stringCompare(op, inName) == 0 then
+      outBool := true;
+      break;
+    end if;
+  end for;
+end isTransformingMathFunction;
 
 ///////////////////////
 /* Dumping functions */
