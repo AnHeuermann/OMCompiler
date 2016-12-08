@@ -134,6 +134,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
   long N;
   SIMULATION_DATA tmpSimData = {0};
   char filename[128], filename2[128];
+  size_t stats[STAT_SIZE];
 
   dasslData->residualFunction = functionODE_residual;
   N = data->modelData->nStates;
@@ -353,6 +354,8 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       sprintf(filename, "%s_adolcAsciiTrace.txt", data->modelData->modelFilePrefix);
       //sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
       read_ascii_trace(filename, 0);
+      tapestats(0,stats);
+      dasslData->adolc_num_params = stats[NUM_PARAM];
       //write_ascii_trace(filename2, 0);
       dasslData->jacobianFunction =  JacobianADOLC;
       break;
@@ -1175,7 +1178,8 @@ static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, d
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
 
   updateTimeParamLoc(dasslData->adolcParam, *t);
-  set_param_vec(0, data->modelData->nParametersReal+1, dasslData->adolcParam);
+  if (dasslData->adolc_num_params >= data->modelData->nParametersReal+1)
+    set_param_vec(0, data->modelData->nParametersReal+1, dasslData->adolcParam);
   printCurrentStatesVector(LOG_JAC, y, data, *t);
   jacobian(0, dasslData->N, dasslData->N, y, dasslData->adolcJac);
 
