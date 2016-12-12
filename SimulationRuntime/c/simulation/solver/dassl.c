@@ -313,8 +313,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
   /* selects the calculation method of the jacobian */
   if(dasslData->dasslJacobian == COLOREDNUMJAC ||
      dasslData->dasslJacobian == COLOREDSYMJAC ||
-     dasslData->dasslJacobian == SYMJAC        ||
-     dasslData->dasslJacobian == ADOLCSPARSE)
+     dasslData->dasslJacobian == SYMJAC)
   {
     ANALYTIC_JACOBIAN* jacobian = &(data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A]);
     if (data->callback->initialAnalyticJacobianA(data, threadData, jacobian))
@@ -1270,13 +1269,11 @@ static int JacobianADOLCSparse(double *t, double *y, double *yprime, double *del
   threadData_t *threadData = (threadData_t*)(void*)((double**)rpar)[2];
   int i, j;
   static int repeat = 0;
-  unsigned int *rows = NULL;
-  unsigned int *cols = NULL;
-  double *values = NULL;
-  const int index = data->callback->INDEX_JAC_A;
-  int nnz = data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.numberOfNoneZeros;
+  static unsigned int *rows = NULL;
+  static unsigned int *cols = NULL;
+  static double *values = NULL;
+  static int nnz;
   int options[4] = { 0,1,0,0 };
-  //fprintf(stderr, "Adolc nnz = %d\n", nnz);
 
   /* the first argument is the same number as in function name after system */
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
