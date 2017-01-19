@@ -519,12 +519,13 @@ ida_solver_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo
       sprintf(filename, "%s_adolcAsciiTrace.txt", data->modelData->modelFilePrefix);
       read_ascii_trace(filename, 0);
 
-      /* debug */
+      /* debug
       sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
       tapestats(0,stats);
       numparam = stats[NUM_PARAM];
       fprintf(stderr, "Numparams: %d\n", numparam);
       write_ascii_trace(filename2, 0);
+      */
 
       flag = IDASlsSetSparseJacFn(idaData->ida_mem, jacobianSparseADOLC);
       if(measure_time_flag)
