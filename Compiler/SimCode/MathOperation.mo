@@ -132,7 +132,7 @@ public function createOperationData
   output Option<OperationData> outOperationData;
 protected
   list<Operation> operations;
-  constant Boolean debug = true;
+  constant Boolean debug = false;
   Integer numVar;
   Integer maxTmpIndex;
   Integer tmpIndex;
