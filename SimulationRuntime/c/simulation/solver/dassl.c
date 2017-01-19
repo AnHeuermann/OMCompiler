@@ -127,6 +127,8 @@ static int functionODE_residual(double *t, double *x, double *xprime, double *cj
 /* function for calculating zeroCrossings */
 static int function_ZeroCrossingsDASSL(int *neqm, double *t, double *y, double *yp,
         int *ng, double *gout, double *rpar, int* ipar);
+/* function for calculating state values on residual form */
+static int functionODE_residualADOLC(double *t, double *x, double *xprime, double *cj, double *delta, int *ires, double *rpar, int* ipar);
 
 int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo, DASSL_DATA *dasslData)
 {
@@ -365,6 +367,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       //dasslData->adolc_num_params = stats[NUM_PARAM];
       //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
       //write_ascii_trace(filename2, 0);
+      dasslData->residualFunction = functionODE_residualADOLC;
       dasslData->jacobianFunction =  JacobianADOLC;
       if(measure_time_flag)
       {
@@ -389,6 +392,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       //dasslData->adolc_num_params = stats[NUM_PARAM];
       //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
       //write_ascii_trace(filename2, 0);
+      dasslData->residualFunction = functionODE_residualADOLC;
       dasslData->jacobianFunction =  JacobianADOLCSparse;
       if(measure_time_flag)
       {
@@ -802,7 +806,6 @@ continue_DASSL(int* idid, double* atol)
   return retValue;
 }
 
-
 int functionODE_residual(double *t, double *y, double *yd, double* cj, double *delta,
                     int *ires, double *rpar, int *ipar)
 {
@@ -1200,6 +1203,7 @@ static int callJacobian(double *t, double *y, double *yprime, double *deltaD, do
   return 0;
 }
 
+static
 void updateTimeParamLoc(double* param, double t)
 {
   param[0] = t;
@@ -1320,7 +1324,38 @@ static int JacobianADOLCSparse(double *t, double *y, double *yprime, double *del
   return 0;
 }
 
+int functionODE_residualADOLC(double *t, double *y, double *yd, double* cj, double *delta,
+                    int *ires, double *rpar, int *ipar)
+{
+  TRACE_PUSH
+  DATA* data = (DATA*)((double**)rpar)[0];
+  DASSL_DATA* dasslData = (DASSL_DATA*)((double**)rpar)[1];
+  threadData_t *threadData = (threadData_t*)((double**)rpar)[2];
 
+  long i;
+  /* the first argument is the same number as in function name after system */
+  /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
+  updateTimeParamLoc(dasslData->adolcParam, *t);
+  set_param_vec(0, data->modelData->nParametersReal+1 , dasslData->adolcParam);
+
+  /* read input vars */
+  externalInputUpdate(data);
+  data->callback->input_function(data, threadData);
+
+  /* eval input vars */
+  function(0, dasslData->N, dasslData->N, y, data->localData[0]->realVars + data->modelData->nStates);
+
+  /* get the difference between the temp_xd(=localData->statesDerivatives)
+     and xd(=statesDerivativesBackup) */
+  for(i=0; i < data->modelData->nStates; i++)
+  {
+    delta[i] = data->localData[0]->realVars[data->modelData->nStates + i] - yd[i];
+  }
+  printVector(LOG_DASSL_STATES, "dd", delta, data->modelData->nStates, *t);
+
+  TRACE_POP
+  return 0;
+}
 
 
 #ifdef __cplusplus
