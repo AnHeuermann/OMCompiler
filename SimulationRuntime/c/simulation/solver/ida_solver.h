@@ -100,6 +100,10 @@ typedef struct IDA_SOLVER
   double *states;
   double *statesDer;
 
+  /* adolc data */
+  double** adolcJac;
+  double* adolcParam;
+
   /* ### ida sensitivities ### */
   int idaSmode;
   int Np;
