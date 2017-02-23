@@ -33,11 +33,12 @@ template createAdolcText(SimCode simCode)
                           modelOperationData=modelOperationData) then
     let maxTmpIndex = match modelOperationData
                       case SOME(operationData as
-                                OPERATIONDATA(maxTmpIndex=maxTmpIndex)) then
+                                OPERATIONDATA(maxTmpIndex=maxTmpIndex, independents=inds, dependents=deps)) then
                          '<%maxTmpIndex%>'
                       end match
     //let()= System.tmpTickResetIndex(0,25) /* reset tmp index */
     // states are independent variables
+    /*
     let assign_zero = ""
     let &assign_zero += (vars.stateVars |> var as  SIMVAR(__) =>
             '{ op:assign_d_zero loc:<%index%> }'
@@ -50,15 +51,16 @@ template createAdolcText(SimCode simCode)
     let &assign_zero += (vars.algVars  |> var as SIMVAR(__) =>
         '{ op:assign_d_zero loc:<%index%> }'
     ;separator="\n")
+    */
     // states are independent variables
     let assign_ind = ""
-    let &assign_ind += (vars.stateVars  |> var as SIMVAR(__) =>
-        '{ op:assign_ind loc:<%index%> }'
+    let &assign_ind += (inds  |> i as Integer =>
+        '{ op:assign_ind loc:<%i%> }'
     ;separator="\n")
     // derivates are dependent variables
     let assign_dep = ""
-    let &assign_dep += (vars.derivativeVars  |> var as SIMVAR(__) =>
-        '{ op:assign_dep loc:<%index%> }'
+    let &assign_dep += (deps  |> i as Integer =>
+        '{ op:assign_dep loc:<%i%> }'
     ;separator="\n")
     
 

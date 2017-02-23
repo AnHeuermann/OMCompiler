@@ -602,7 +602,7 @@ algorithm
 
     // create model operation data for adolc
     if  Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then
-      modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations), crefToSimVarHT, modelInfo.vars);
+      modelOperationData := MathOperation.createOperationDataEqns(List.flatten(odeEquations), crefToSimVarHT, modelInfo.vars);
       //MathOperation.dumpOperationData(modelOperationData);
       execStat("simCode: ADOLC createOperationData");
     else

@@ -65,7 +65,14 @@ import SimCodeUtil;
 import System;
 import Util;
 
-
+/* TODO:
+    - write new entry point for a model
+      - define independets and depndents
+      - care for functions
+      -
+    - create operationsDataStmts
+    - use workingStateArgs in alls functions
+*/
 
 
 // data types
@@ -76,6 +83,10 @@ public uniontype MathOperator
   end ASSIGN_PARAM;
   record ASSIGN_PASSIVE
   end ASSIGN_PASSIVE;
+  record ASSIGN_IND
+  end ASSIGN_IND;
+  record ASSIGN_DEP
+  end ASSIGN_DEP;
   record PLUS
     Boolean isActive;
   end PLUS;
@@ -95,6 +106,9 @@ public uniontype MathOperator
   record UNARY_CALL
     Absyn.Ident ident;
   end UNARY_CALL;
+  record MODELICA_CALL
+    Absyn.Ident ident;
+  end MODELICA_CALL;
 end MathOperator;
 
 public uniontype Operand
@@ -106,6 +120,9 @@ public uniontype Operand
   end OPERAND_CONST;
   record OPERAND_TIME
   end OPERAND_TIME;
+  record OPERAND_INDEX
+    Integer i;
+  end OPERAND_INDEX;
 end Operand;
 
 public uniontype Operation
@@ -120,27 +137,35 @@ public uniontype OperationData
   record OPERATIONDATA
     list<Operation> operations;
     Integer maxTmpIndex;
+    list<Integer> independents;
+    list<Integer> dependents;
   end OPERATIONDATA;
 end OperationData;
 
+protected uniontype WorkingStateArgs
+  record WORKINGSTATEARGS
+    SimCode.HashTableCrefToSimVar crefToSimVarHT;
+    list<Absyn.Path> funcNames;
+    Integer maxTmpIndex;
+    Integer numParam
+  end WORKINGSTATEARGS;
+end WorkingStateArgs;
+
 
 /* main entry point for that module */
-public function createOperationData
+public function createOperationDataEqns
   input list<SimCode.SimEqSystem> inEquations;
   input SimCode.HashTableCrefToSimVar crefToSimVarHT;
-  input SimCodeVar.SimVars vars;
+  input Integer numberOfVariables;
   output Option<OperationData> outOperationData;
 protected
   list<Operation> operations;
   constant Boolean debug = false;
-  Integer numVar;
-  Integer maxTmpIndex;
+  Integer maxTmpIndex = numberOfVariables;
   Integer tmpIndex;
 algorithm
   try
     operations := {};
-    numVar := listLength(vars.stateVars) + listLength(vars.derivativeVars) + listLength(vars.algVars);
-    maxTmpIndex := numVar;
     if debug then
       print("createOperationData equations input: \n");
       print(Tpl.tplString3(TaskSystemDump.dumpEqs, inEquations, 0, false));
@@ -160,7 +185,7 @@ algorithm
           //operands = {};
           simVar = BaseHashTable.get(cref, crefToSimVarHT);
           simVarOperand = OPERAND_VAR(simVar);
-          (assignOperand, operations, tmpIndex) = collectOperationsForExp(exp, crefToSimVarHT, operations, numVar);
+          (assignOperand, operations, tmpIndex) = collectOperationsForExp(exp, crefToSimVarHT, operations, numberOfVariables);
           //print("Done with collectOperationsForExp\n");
           if isTmpOperand(assignOperand) then
             op::rest = operations;
@@ -170,8 +195,10 @@ algorithm
             op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
             operations = op::operations;
           end if;
+        then ();
 
-
+        case SimCode.SES_ALGORITHM(index = index, statements=stmts) equation
+          (operations, tmpIndex) = createOperationDataStmts(stmts, crefToSimVarHT);
         then ();
         //else ();
       end matchcontinue;
@@ -182,7 +209,62 @@ algorithm
   else
     outOperationData := NONE();
   end try;
-end createOperationData;
+end createOperationDataEqns;
+
+
+public function createOperationDataStmts
+  input list<DAE.Statement> inStmts;
+  input WorkingStateArgs woringArgs;
+  output Option<OperationData> outOperationData;
+protected
+  list<Operation> operations;
+  constant Boolean debug = false;
+  Integer maxTmpIndex = numberOfVariables;
+  Integer tmpIndex;
+algorithm
+  try
+    operations := {};
+    if debug then
+      print("createOperationData equations input: \n");
+      print(Tpl.tplString3(TaskSystemDump.dumpEqs, inEquations, 0, false));
+    end if;
+    for smts in inStmts loop
+      () := matchcontinue smts
+      local
+        Integer index;
+        DAE.Exp rhs, lhs;
+        DAE.ComponentRef cref;
+        list<Operation> rest;
+        Operation op;
+        list<Operand> operands;
+        Operand assignOperand, simVarOperand;
+        SimCodeVar.SimVar simVar;
+        case DAE.STMT_ASSIGN(exp = lhs, exp1 = rhs) equation
+          //operands = {};
+          cref = Expression.expCref(lhs);
+          simVar = BaseHashTable.get(cref, crefToSimVarHT);
+          simVarOperand = OPERAND_VAR(simVar);
+          (assignOperand, operations, tmpIndex) = collectOperationsForExp(rhs, crefToSimVarHT, operations, numberOfVariables);
+          //print("Done with collectOperationsForExp\n");
+          if isTmpOperand(assignOperand) then
+            op::rest = operations;
+            op = replaceOperationResult(op, simVarOperand);
+            operations = op::rest;
+          else
+            op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+            operations = op::operations;
+          end if;
+        then ();
+        //else ();
+      end matchcontinue;
+      maxTmpIndex := max(maxTmpIndex,tmpIndex);
+    end for;
+    operations := listReverse(operations);
+    outOperationData := SOME(OPERATIONDATA(operations,maxTmpIndex));
+  else
+    outOperationData := NONE();
+  end try;
+end createOperationDataStmts;
 
 protected function collectOperationsForExp
   input DAE.Exp inExp;
@@ -206,12 +288,13 @@ algorithm
     local
       DAE.ComponentRef cref;
       SimCode.HashTableCrefToSimVar crefToSimVarHT;
-      SimCodeVar.SimVar resVar, timeVar, paramVar, extraVar;
+      SimCodeVar.SimVar resVar, timeVar, paramVar, extraVar, startVar;
       list<Operand> opds, rest;
       list<Operation> ops;
       Operation operation;
       Operand result;
       DAE.Exp e1,e2;
+      list<DAE.Exp> expList;
       DAE.Type ty;
       DAE.Operator op;
       Integer tmpIndex;
@@ -292,6 +375,32 @@ algorithm
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1,OPERAND_VAR(extraVar)}, UNARY_CALL(ident), result);
       ops = operation::ops;
+    then
+      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+
+    case (DAE.CALL(path=Absyn.IDENT("start"),  expLst={DAE.CREF(componentRef=cref)}, attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT))
+    equation
+      startVar = BaseHashTable.get(cref, crefToSimVarHT);
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      operation = OPERATION({OPERAND_INDEX(startVar.index+(numParam+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
+      ops = operation::ops;
+      opds = OPERAND_VAR(resVar)::opds;
+    then
+      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+
+    // Modelica functions
+    case (DAE.CALL(path=Absyn.IDENT(ident), expLst=expList, attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT))
+    equation
+      // check if function exits in workingStatargs funcNames, else append
+
+      // process all call armugments by with expList
+      // ops = collectOperationsForExpLst(ops)
+      // create tmp opds and ops for contigous indices for input of modelica_call
+         // operation assign_active is always created
+      // create modelica_call( ident = "ident") operator
+      // create operation for the modelica call with tmp opds
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      result = OPERAND_VAR(resVar);
     then
       (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
 
