@@ -67,7 +67,7 @@ import Util;
 
 /* TODO:
     - write new entry point for a model
-      - define independets and depndents
+      - define independets and dependents
       - care for functions
       -
     - create operationsDataStmts
@@ -147,22 +147,47 @@ protected uniontype WorkingStateArgs
     SimCode.HashTableCrefToSimVar crefToSimVarHT;
     list<Absyn.Path> funcNames;
     Integer maxTmpIndex;
-    Integer numParam
+    Integer numParameters;
   end WORKINGSTATEARGS;
 end WorkingStateArgs;
 
 
-/* main entry point for that module */
-public function createOperationDataEqns
+public function createOperationData
   input list<SimCode.SimEqSystem> inEquations;
   input SimCode.HashTableCrefToSimVar crefToSimVarHT;
-  input Integer numberOfVariables;
+  input SimCode.VarInfo varInfo;
+  input DAE.FunctionTree functions;
   output Option<OperationData> outOperationData;
 protected
-  list<Operation> operations;
+  WorkingStateArgs workingArgs;
+  Integer numVariables; 
+algorithm
+  try
+    numVariables := 2*varInfo.numStateVars + varInfo.numAlgVars;
+    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, numVariables, varInfo.numParams);
+    
+    // create operation of the equations
+    (outOperationData,workingArgs) := createOperationEqns(inEquations, workingArgs);
+    // create needed functions
+    
+  else
+    outOperationData := NONE();  
+  end try;
+end createOperationData;
+
+
+
+/* main entry point for that module */
+protected function createOperationEqns
+  input list<SimCode.SimEqSystem> inEquations;
+  input WorkingStateArgs iworkingArgs;
+  output Option<OperationData> outOperationData;
+  output WorkingStateArgs workingArgs = iworkingArgs;
+protected
+  list<Operation> operations, tmpOps;
   constant Boolean debug = false;
-  Integer maxTmpIndex = numberOfVariables;
   Integer tmpIndex;
+  list<DAE.Statement> statements;
 algorithm
   try
     operations := {};
@@ -183,9 +208,9 @@ algorithm
         SimCodeVar.SimVar simVar;
         case SimCode.SES_SIMPLE_ASSIGN(index = index, exp = exp, cref = cref) equation
           //operands = {};
-          simVar = BaseHashTable.get(cref, crefToSimVarHT);
+          simVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
           simVarOperand = OPERAND_VAR(simVar);
-          (assignOperand, operations, tmpIndex) = collectOperationsForExp(exp, crefToSimVarHT, operations, numberOfVariables);
+          (assignOperand, operations, workingArgs) = collectOperationsForExp(exp, operations, workingArgs);
           //print("Done with collectOperationsForExp\n");
           if isTmpOperand(assignOperand) then
             op::rest = operations;
@@ -197,36 +222,35 @@ algorithm
           end if;
         then ();
 
-        case SimCode.SES_ALGORITHM(index = index, statements=stmts) equation
-          (operations, tmpIndex) = createOperationDataStmts(stmts, crefToSimVarHT);
+        case SimCode.SES_ALGORITHM(index = index, statements=statements) equation
+          (tmpOps, workingArgs) = createOperationDataStmts(statements, workingArgs);
+          operations = listAppend(tmpOps, operations); 
         then ();
         //else ();
       end matchcontinue;
-      maxTmpIndex := max(maxTmpIndex,tmpIndex);
     end for;
     operations := listReverse(operations);
-    outOperationData := SOME(OPERATIONDATA(operations,maxTmpIndex));
+    outOperationData := SOME(OPERATIONDATA(operations, workingArgs.maxTmpIndex, {}, {}));
   else
     outOperationData := NONE();
   end try;
-end createOperationDataEqns;
+end createOperationEqns;
 
 
 public function createOperationDataStmts
   input list<DAE.Statement> inStmts;
-  input WorkingStateArgs woringArgs;
-  output Option<OperationData> outOperationData;
+  input WorkingStateArgs iworkingArgs;
+  output list<Operation> outOperationData;
+  output WorkingStateArgs workingArgs = iworkingArgs;
 protected
   list<Operation> operations;
   constant Boolean debug = false;
-  Integer maxTmpIndex = numberOfVariables;
   Integer tmpIndex;
 algorithm
   try
     operations := {};
     if debug then
-      print("createOperationData equations input: \n");
-      print(Tpl.tplString3(TaskSystemDump.dumpEqs, inEquations, 0, false));
+      print("createOperation for statements input: \n");
     end if;
     for smts in inStmts loop
       () := matchcontinue smts
@@ -242,9 +266,9 @@ algorithm
         case DAE.STMT_ASSIGN(exp = lhs, exp1 = rhs) equation
           //operands = {};
           cref = Expression.expCref(lhs);
-          simVar = BaseHashTable.get(cref, crefToSimVarHT);
+          simVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
           simVarOperand = OPERAND_VAR(simVar);
-          (assignOperand, operations, tmpIndex) = collectOperationsForExp(rhs, crefToSimVarHT, operations, numberOfVariables);
+          (assignOperand, operations, workingArgs) = collectOperationsForExp(rhs, operations, workingArgs);
           //print("Done with collectOperationsForExp\n");
           if isTmpOperand(assignOperand) then
             op::rest = operations;
@@ -252,37 +276,33 @@ algorithm
             operations = op::rest;
           else
             op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
-            operations = op::operations;
+            outOperationData = op::operations;
           end if;
         then ();
         //else ();
       end matchcontinue;
-      maxTmpIndex := max(maxTmpIndex,tmpIndex);
     end for;
-    operations := listReverse(operations);
-    outOperationData := SOME(OPERATIONDATA(operations,maxTmpIndex));
   else
-    outOperationData := NONE();
+    outOperationData := {};
   end try;
 end createOperationDataStmts;
 
 protected function collectOperationsForExp
   input DAE.Exp inExp;
-  input SimCode.HashTableCrefToSimVar crefToSimVarHT;
   input list<Operation> inOps;
-  input Integer tmpOffset;
+  input WorkingStateArgs iworkingArgs;
   output Operand lastResult;
   output list<Operation> outOps;
-  output Integer maxTmpIndex;
+  output WorkingStateArgs oworkingArgs;
 algorithm
-  (_, ({lastResult}, outOps, maxTmpIndex, _)) := Expression.traverseExpBottomUp(inExp,collectOperation,({}, inOps, tmpOffset, crefToSimVarHT));
+  (_, ({lastResult}, outOps, oworkingArgs)) := Expression.traverseExpBottomUp(inExp,collectOperation,({}, inOps, iworkingArgs));
 end collectOperationsForExp;
 
 protected function collectOperation
   input DAE.Exp inExp;
-  input tuple< list<Operand>, list<Operation>, Integer, SimCode.HashTableCrefToSimVar> inTpl;
+  input tuple< list<Operand>, list<Operation>, WorkingStateArgs> inTpl;
   output DAE.Exp outExp;
-  output tuple<list<Operand>, list<Operation>, Integer, SimCode.HashTableCrefToSimVar> outTpl;
+  output tuple<list<Operand>, list<Operation>, WorkingStateArgs> outTpl;
 algorithm
   (outExp, outTpl) := matchcontinue (inExp, inTpl)
     local
@@ -301,95 +321,103 @@ algorithm
       Operand opd1, opd2;
       Absyn.Ident ident;
       String str;
+      WorkingStateArgs workingArgs;
 
-    case (e1 as DAE.RCONST(), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+    case (e1 as DAE.RCONST(), (opds, ops, workingArgs)) equation
       opds = OPERAND_CONST(e1)::opds;
     then
-      (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (opds, ops, workingArgs));
 
-    case (DAE.CREF(componentRef=DAE.CREF_IDENT(ident="time"), ty=ty), (opds, ops, tmpIndex, crefToSimVarHT)) equation
-      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+    case (DAE.CREF(componentRef=DAE.CREF_IDENT(ident="time"), ty=ty), (opds, ops, workingArgs)) equation
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.maxTmpIndex, ty);
       operation = OPERATION({OPERAND_TIME()}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::opds;
     then
-      (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (opds, ops, workingArgs));
 
-    case (DAE.CREF(componentRef=cref, ty=ty), (opds, ops, tmpIndex, crefToSimVarHT)) equation
-      paramVar = BaseHashTable.get(cref, crefToSimVarHT);
+    case (DAE.CREF(componentRef=cref, ty=ty), (opds, ops, workingArgs)) equation
+      paramVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
       //guard
       BackendDAE.PARAM() = paramVar.varKind;
-      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.maxTmpIndex, ty);
+      workingArgs.maxTmpIndex = tmpIndex;
       operation = OPERATION({OPERAND_VAR(paramVar)}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::opds;
     then
-      (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (opds, ops, workingArgs));
 
-    case (DAE.CREF(componentRef=cref), (opds, ops, tmpIndex, crefToSimVarHT)) equation
-      resVar = BaseHashTable.get(cref, crefToSimVarHT);
+    case (DAE.CREF(componentRef=cref), (opds, ops, workingArgs)) equation
+      resVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
       opds = OPERAND_VAR(resVar)::opds;
     then
-      (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (opds, ops, workingArgs));
 
-    case (DAE.CALL(path=Absyn.IDENT("der")), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+    case (DAE.CALL(path=Absyn.IDENT("der")), (opds, ops, workingArgs)) equation
       OPERAND_VAR(resVar)::rest = opds;
       cref = ComponentReference.crefPrefixDer(resVar.name);
-      resVar = BaseHashTable.get(cref, crefToSimVarHT);
+      resVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
       opds = OPERAND_VAR(resVar)::rest;
     then
-      (inExp, (opds, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (opds, ops, workingArgs));
 
-    case (DAE.BINARY(operator = op), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+    case (DAE.BINARY(operator = op), (opds, ops, workingArgs)) equation
       opd2::opd1::rest = opds;
-      (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd2}, tmpIndex);
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd2}, workingArgs.maxTmpIndex);
+      workingArgs.maxTmpIndex = tmpIndex;
       ops = operation::ops;
     then
-      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (result::rest, ops, workingArgs));
 
-    case (DAE.CALL(path=Absyn.IDENT("DIVISION"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT)) equation
+    case (DAE.CALL(path=Absyn.IDENT("DIVISION"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
       op = DAE.DIV(ty);
       opd2::opd1::rest = opds;
-      (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd2}, tmpIndex);
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd2}, workingArgs.maxTmpIndex);
+      workingArgs.maxTmpIndex = tmpIndex;
       ops = operation::ops;
     then
-      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (result::rest, ops, workingArgs));
 
-    case (DAE.CALL(path=Absyn.IDENT(ident), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT))
+    case (DAE.CALL(path=Absyn.IDENT(ident), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
       guard isMathFunction(ident)
     equation
       opd1::rest = opds;
-      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.maxTmpIndex, ty);
+      workingArgs.maxTmpIndex = tmpIndex;
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1}, UNARY_CALL(ident), result);
       ops = operation::ops;
     then
-      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (result::rest, ops, workingArgs));
 
-    case (DAE.CALL(path=Absyn.IDENT(ident), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT))
+    case (DAE.CALL(path=Absyn.IDENT(ident), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
       guard isTrigMathFunction(ident)
     equation
       opd1::rest = opds;
-      (extraVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      (extraVar, tmpIndex) = createSimTmpVar(workingArgs.maxTmpIndex, ty);
       (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      workingArgs.maxTmpIndex = tmpIndex;
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1,OPERAND_VAR(extraVar)}, UNARY_CALL(ident), result);
       ops = operation::ops;
     then
-      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (result::rest, ops, workingArgs));
 
-    case (DAE.CALL(path=Absyn.IDENT("start"),  expLst={DAE.CREF(componentRef=cref)}, attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT))
+    case (DAE.CALL(path=Absyn.IDENT("start"),  expLst={DAE.CREF(componentRef=cref)}, attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
     equation
-      startVar = BaseHashTable.get(cref, crefToSimVarHT);
-      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
-      operation = OPERATION({OPERAND_INDEX(startVar.index+(numParam+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
+      startVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.maxTmpIndex, ty);
+      workingArgs.maxTmpIndex = tmpIndex;
+      operation = OPERATION({OPERAND_INDEX(startVar.index+(workingArgs.numParameters+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::opds;
     then
-      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (opds, ops, workingArgs));
 
     // Modelica functions
-    case (DAE.CALL(path=Absyn.IDENT(ident), expLst=expList, attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, tmpIndex, crefToSimVarHT))
+/*
+    case (DAE.CALL(path=Absyn.IDENT(ident), expLst=expList, attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs))
     equation
       // check if function exits in workingStatargs funcNames, else append
 
@@ -399,20 +427,21 @@ algorithm
          // operation assign_active is always created
       // create modelica_call( ident = "ident") operator
       // create operation for the modelica call with tmp opds
-      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      (resVar, workingArgs.maxTmpIndex) = createSimTmpVar(workingArgs.maxTmpIndex, ty);
       result = OPERAND_VAR(resVar);
     then
-      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
-
-    case (DAE.UNARY(exp=e1), (opds, ops, tmpIndex, crefToSimVarHT))
+      (inExp, (result::rest, ops, workingArgs));
+*/
+    case (DAE.UNARY(exp=e1), (opds, ops, workingArgs))
     equation
       opd1::rest = opds;
-      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, Expression.typeof(e1));
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.maxTmpIndex, Expression.typeof(e1));
+      workingArgs.maxTmpIndex = tmpIndex;
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1}, UNARY_NEG(), result);
       ops = operation::ops;
     then
-      (inExp, (result::rest, ops, tmpIndex, crefToSimVarHT));
+      (inExp, (result::rest, ops, workingArgs));
 
     else
       (inExp, inTpl);

@@ -31,11 +31,9 @@ template createAdolcText(SimCode simCode)
   case simCode as SIMCODE(modelInfo=MODELINFO(vars=vars as SIMVARS(__),
                                               varInfo=varInfo as VARINFO(__)),
                           modelOperationData=modelOperationData) then
-    let maxTmpIndex = match modelOperationData
-                      case SOME(operationData as
-                                OPERATIONDATA(maxTmpIndex=maxTmpIndex, independents=inds, dependents=deps)) then
-                         '<%maxTmpIndex%>'
-                      end match
+    match modelOperationData
+    case SOME(operationData as OPERATIONDATA(maxTmpIndex=maxTmpIndex, independents=inds, dependents=deps)) then
+    let tmpIndex='<%maxTmpIndex%>'
     //let()= System.tmpTickResetIndex(0,25) /* reset tmp index */
     // states are independent variables
     /*
@@ -62,7 +60,6 @@ template createAdolcText(SimCode simCode)
     let &assign_dep += (deps  |> i as Integer =>
         '{ op:assign_dep loc:<%i%> }'
     ;separator="\n")
-    
 
     let death_not = '{ op:death_not loc:0 loc:<%maxTmpIndex%> }'
     let num_real_param = '{ op:set_numparam loc:<%varInfo.numParams%> }'
@@ -77,7 +74,6 @@ template createAdolcText(SimCode simCode)
                     end match
     <<
     // allocation of used variables
-    <%assign_zero%>
     // define independent
     <%assign_ind%>
     // operations
@@ -89,6 +85,7 @@ template createAdolcText(SimCode simCode)
     // num real parameters
     <%num_real_param%>
     >>
+    end match
   end match
 end createAdolcText;
 
