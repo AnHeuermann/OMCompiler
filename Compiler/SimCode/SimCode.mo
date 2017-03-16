@@ -155,8 +155,7 @@ uniontype SimCode
     Option<DaeModeData> daeModeData;
     list<SimEqSystem> inlineEquations;
     Option<OMSIData> omsiData "used for OMSI to generate equations code";
-    Option<MathOperation.OperationData> modelOperationData "model operation data for adolc"; 
-
+    list<MathOperation.OperationData> modelOperationData "model operation data for adolc";
   end SIMCODE;
 end SimCode;
 

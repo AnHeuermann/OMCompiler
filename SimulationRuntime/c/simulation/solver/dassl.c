@@ -360,7 +360,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal)*sizeof(double));
       memcpy(dasslData->adolcParam +1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
 
-      sprintf(filename, "%s_adolcAsciiTrace.txt", data->modelData->modelFilePrefix);
+      sprintf(filename, "%s_aat.txt", data->modelData->modelFilePrefix);
       //sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
       read_ascii_trace(filename, 0);
       //tapestats(0,stats);
@@ -385,7 +385,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal)*sizeof(double));
       memcpy(dasslData->adolcParam +1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
 
-      sprintf(filename, "%s_adolcAsciiTrace.txt", data->modelData->modelFilePrefix);
+      sprintf(filename, "%s_aat.txt", data->modelData->modelFilePrefix);
       //sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
       read_ascii_trace(filename, 0);
       //tapestats(0,stats);

@@ -18,38 +18,17 @@ import ExpressionDumpTpl;
   "Generates ADOL-C ascii trace file"
 ::=
   match simCode
-  case simCode as SIMCODE(__) then
-    let text = createAdolcText(simCode)
-    let()=textFile(text, '<%fileNamePrefix%>_adolcAsciiTrace.txt')
-    ""
+  case simCode as SIMCODE(modelOperationData=modelOperationData,modelInfo=MODELINFO(varInfo=VARINFO(numParams=numParams))) then
+    let text = (modelOperationData |> opData as OPERATIONDATA(name=name) => textFile(createAdolcTrace(opData,numParams), '<%name%>_aat.txt'))
+    <<>>
   end match 
 end generateAdolcAsciiTrace;
 
-template createAdolcText(SimCode simCode)
+template createAdolcTrace(OperationData modelOperationData, Integer numParams)
 ::=
-  match simCode
-  case simCode as SIMCODE(modelInfo=MODELINFO(vars=vars as SIMVARS(__),
-                                              varInfo=varInfo as VARINFO(__)),
-                          modelOperationData=modelOperationData) then
-    match modelOperationData
-    case SOME(operationData as OPERATIONDATA(maxTmpIndex=maxTmpIndex, independents=inds, dependents=deps)) then
+  match modelOperationData
+    case operationData as OPERATIONDATA(maxTmpIndex=maxTmpIndex, independents=inds, dependents=deps) then
     let tmpIndex='<%maxTmpIndex%>'
-    //let()= System.tmpTickResetIndex(0,25) /* reset tmp index */
-    // states are independent variables
-    /*
-    let assign_zero = ""
-    let &assign_zero += (vars.stateVars |> var as  SIMVAR(__) =>
-            '{ op:assign_d_zero loc:<%index%> }'
-    ;separator="\n")
-    let &assign_zero += "\n"
-    let &assign_zero += (vars.derivativeVars  |> var as SIMVAR(__) =>
-        '{ op:assign_d_zero loc:<%index%> }'
-    ;separator="\n")
-    let &assign_zero += "\n"
-    let &assign_zero += (vars.algVars  |> var as SIMVAR(__) =>
-        '{ op:assign_d_zero loc:<%index%> }'
-    ;separator="\n")
-    */
     // states are independent variables
     let assign_ind = ""
     let &assign_ind += (inds  |> i as Integer =>
@@ -62,10 +41,10 @@ template createAdolcText(SimCode simCode)
     ;separator="\n")
 
     let death_not = '{ op:death_not loc:0 loc:<%maxTmpIndex%> }'
-    let num_real_param = '{ op:set_numparam loc:<%varInfo.numParams%> }'
+    let num_real_param = '{ op:set_numparam loc:<%numParams%> }'
     let operations = match modelOperationData
-                      case SOME(operationData as
-                                OPERATIONDATA(operations=operations)) then
+                      case operationData as
+                                OPERATIONDATA(operations=operations) then
                       let opsText = ""
                       let &opsText += (operations |> op as OPERATION(__)
                                        => createOperatorText(op)
@@ -85,36 +64,16 @@ template createAdolcText(SimCode simCode)
     // num real parameters
     <%num_real_param%>
     >>
-    end match
   end match
-end createAdolcText;
+end createAdolcTrace;
 
 template createOperatorText(MathOperation.Operation op)
 ::= match op
     case OPERATION(operator=operator,operands=operands,result=result) then
-       match operator
-         case ASSIGN_PARAM() then
-             let operStr = 'assign_p'
-             let locsStr = ""
-             let &locsStr += (operands |> opd
-                      as OPERAND_VAR(variable=variable as SimCodeVar.SIMVAR(index=index)) => ' loc:<%intAdd(index,1)%>')
-             let &locsStr += (operands |> opd as OPERAND_TIME() => ' loc:0')
-             let &locsStr += match result
-                        case OPERAND_VAR(variable=variable as
-                                     SimCodeVar.SIMVAR(index=index)) then
-                        ' loc:<%index%>'
-                        end match
-             <<{ op:<%operStr%><%locsStr%> }>>
-
-         else
     let operStr = MathOperation.printOperatorStr(operator)
     let locsStr = ""
-    let &locsStr += (operands |> opd as OPERAND_VAR(variable=variable as SimCodeVar.SIMVAR(index=index)) => 'loc:<%index%> ')
-    let &locsStr += match result
-                    case OPERAND_VAR(variable=variable as
-                                     SimCodeVar.SIMVAR(index=index)) then
-                    'loc:<%index%>'
-                    end match
+    let &locsStr += (operands |> opd => createOperandText(opd))
+    let &locsStr += createOperandText(result)
     let valStr = ""
     let &valStr += (operands |> opd as OPERAND_CONST(const=const)
                     => 'val:<%ExpressionDumpTpl.dumpExp(const,"")%> ')
@@ -123,6 +82,20 @@ template createOperatorText(MathOperation.Operation op)
     <<>>
     end match
 end createOperatorText;
+
+template createOperandText(Operand opd)
+::=match opd
+     case OPERAND_VAR(variable=variable as SimCodeVar.SIMVAR(index=index)) then
+       << loc:<%index%>>>
+     case OPERAND_INDEX(i=index) then
+       << loc:<%index%>>>
+     case OPERAND_TIME() then
+       << loc:0>>
+     else
+       <<>>
+  end match
+
+end createOperandText;
 
 annotation(__OpenModelica_Interface="backend");
 end CodegenADOLC;

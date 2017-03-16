@@ -290,7 +290,7 @@ protected
 
   constant Boolean debug = false;
 
-  Option<MathOperation.OperationData> modelOperationData;
+  list<MathOperation.OperationData> modelOperationData;
   DAE.FunctionTree funcTree;
 algorithm
   try
@@ -604,11 +604,14 @@ algorithm
 
     // create model operation data for adolc
     if  Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then
-      modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations), crefToSimVarHT, modelInfo.varInfo, funcTree);
-      //MathOperation.dumpOperationData(modelOperationData);
+      tmpSimVars := modelInfo.vars;
+      modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations),
+                                                              crefToSimVarHT, modelInfo.varInfo, filenamePrefix,
+                                                              funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars);
+      MathOperation.dumpOperationData(modelOperationData);
       execStat("simCode: ADOLC createOperationData");
     else
-      modelOperationData := NONE();
+      modelOperationData := {};
     end if;
 
     if Flags.getConfigBool(Flags.CALCULATE_SENSITIVITIES) then
