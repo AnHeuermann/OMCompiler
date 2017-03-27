@@ -874,7 +874,7 @@ algorithm
     Integer index;
 
     case OPERAND_VAR(simVar as SimCodeVar.SIMVAR(name = name, index = index))
-    then "VAR(" + ComponentReference.printComponentRefStr(name) + " " + intString(index) + ") ";
+    then "VAR(" + ComponentReference.printComponentRefStr(name) + " " + intString(index) + ")";
 
     case OPERAND_CONST(exp)
     then "CONST(" + ExpressionDump.printExpStr(exp) + ") ";

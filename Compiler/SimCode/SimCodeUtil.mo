@@ -608,7 +608,7 @@ algorithm
       modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations),
                                                               crefToSimVarHT, modelInfo.varInfo, filenamePrefix,
                                                               funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars);
-      MathOperation.dumpOperationData(modelOperationData);
+      //MathOperation.dumpOperationData(modelOperationData);
       execStat("simCode: ADOLC createOperationData");
     else
       modelOperationData := {};
