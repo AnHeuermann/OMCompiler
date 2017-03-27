@@ -279,7 +279,7 @@ protected function createOperationEqns
   output WorkingStateArgs workingArgs = iworkingArgs;
 protected
   list<Operation> operations, tmpOps;
-  constant Boolean debug = true;
+  constant Boolean debug = false;
   Integer maxTmpIndex = iworkingArgs.numVariables;
   list<DAE.Statement> statements;
 algorithm
@@ -312,7 +312,6 @@ algorithm
             op = replaceOperationResult(op, simVarOperand);
             operations = op::rest;
           else
-            print("add assign active\n");
             op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
             operations = op::operations;
           end if;
