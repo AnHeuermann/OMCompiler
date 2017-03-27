@@ -523,7 +523,7 @@ ida_solver_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo
       idaData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal)*sizeof(double));
       memcpy(idaData->adolcParam +1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
 
-      sprintf(filename, "%s_adolcAsciiTrace.txt", data->modelData->modelFilePrefix);
+      sprintf(filename, "%s_aat.txt", data->modelData->modelFilePrefix);
       read_ascii_trace(filename, 0);
 
       /* debug
