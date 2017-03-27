@@ -477,7 +477,7 @@ algorithm
       BackendDAE.PARAM() = paramVar.varKind;
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
-      operation = OPERATION({OPERAND_VAR(paramVar)}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
+      operation = OPERATION({OPERAND_INDEX(paramVar.index+1)}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::opds;
     then
