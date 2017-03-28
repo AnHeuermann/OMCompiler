@@ -456,6 +456,7 @@ algorithm
       String str;
       WorkingStateArgs workingArgs;
       Absyn.Path path;
+      constant Boolean debug = true;
 
     case (e1 as DAE.RCONST(), (opds, ops, workingArgs)) equation
       opds = OPERAND_CONST(e1)::opds;
@@ -623,6 +624,13 @@ algorithm
       ops = operation::ops;
     then
       (inExp, (result::rest, ops, workingArgs));
+
+    /* debug */
+    case (_, _) guard debug
+    equation
+      print(" Dump not handled exp : " + ExpressionDump.dumpExpStr(inExp,0) +"\n");
+    then
+      (inExp, inTpl);
 
     else
       (inExp, inTpl);
