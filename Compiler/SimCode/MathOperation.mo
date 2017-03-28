@@ -531,6 +531,31 @@ algorithm
     then
       (inExp, (result::rest, ops, workingArgs));
 
+    case (DAE.CALL(path=Absyn.IDENT("atan"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
+    equation
+      opd1::rest = opds;
+      // tmp = operation x^2
+      op = DAE.MUL(ty);
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd1}, workingArgs.tmpIndex);
+      ops = operation::ops;
+      // tmp = operation 1 + tmp
+      op = DAE.ADD(ty);
+      opd2 = OPERAND_CONST(DAE.RCONST(1.0));
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd2,result}, workingArgs.tmpIndex);
+      ops = operation::ops;
+      // opd2 = 1 / tmp
+      op = DAE.DIV(ty);
+      (operation, opd2, tmpIndex) = createBinaryOperation(op, {opd2,result}, workingArgs.tmpIndex);
+      ops = operation::ops;
+
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      workingArgs.tmpIndex = tmpIndex;
+      result = OPERAND_VAR(resVar);
+      operation = OPERATION({opd1, opd2}, UNARY_CALL("atan"), result);
+      ops = operation::ops;
+    then
+      (inExp, (result::rest, ops, workingArgs));
+
     case (DAE.CALL(path=Absyn.IDENT(ident), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
       guard isMathFunction(ident)
     equation
@@ -588,7 +613,7 @@ algorithm
     then
       (inExp, (result::opds, ops, workingArgs));
 
-    case (DAE.UNARY(exp=e1), (opds, ops, workingArgs))
+    case (DAE.UNARY(exp=e1, operator = DAE.UMINUS()), (opds, ops, workingArgs))
     equation
       opd1::rest = opds;
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, Expression.typeof(e1));
@@ -795,11 +820,26 @@ algorithm
   end for;
 end isMathFunction;
 
+protected function isArcTrigMathFunction
+  input String inName;
+  output Boolean outBool;
+protected
+  list<String> mathOps = {"asin", "acos", "atan", "asinh", "acosh", "atanh"};
+algorithm
+  outBool := false;
+  for op in mathOps loop
+    if stringCompare(op, inName) == 0 then
+      outBool := true;
+      break;
+    end if;
+  end for;
+end isArcTrigMathFunction;
+
 protected function isTrigMathFunction
   input String inName;
   output Boolean outBool;
 protected
-  list<String> mathOps = {"sin", "cos", "asin", "acos", "asinh", "acosh", "atanh"};
+  list<String> mathOps = {"sin", "cos"};
 algorithm
   outBool := false;
   for op in mathOps loop
