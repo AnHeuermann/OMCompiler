@@ -323,7 +323,10 @@ algorithm
           operations = listAppend(tmpOps, operations); 
         then ();
 
-        else ();
+        else
+        algorithm
+          print("Warning not handled eqn: " + SimCodeUtil.simEqSystemString(eq) + "\n");
+        then ();
       end matchcontinue;
       maxTmpIndex := intMax(maxTmpIndex,workingArgs.tmpIndex);
     end for;
@@ -348,8 +351,8 @@ algorithm
     if debug then
       print("createOperation for statements input: \n");
     end if;
-    for smts in inStmts loop
-      () := matchcontinue smts
+    for stmt in inStmts loop
+      () := matchcontinue stmt
       local
         Integer index;
         DAE.Exp rhs, lhs;
@@ -376,7 +379,11 @@ algorithm
           end if;
           //print(" ops: " + printOperationStr(op) + "\n");
         then ();
-        //else ();
+
+        else
+        algorithm
+          print("Warning not handled stmt: " + DAEDump.ppStatementStr(stmt) + "\n");
+        then ();
       end matchcontinue;
       maxTmpIndex := intMax(maxTmpIndex,workingArgs.tmpIndex);
     end for;
@@ -498,7 +505,8 @@ algorithm
       (inExp, (opds, ops, workingArgs));
 
     // records
-    case (DAE.CREF(componentRef=cref, ty=ty as DAE.T_COMPLEX(complexClassType=ClassInf.RECORD())), (opds, ops, workingArgs)) equation
+    case (DAE.CREF(componentRef=cref), (opds, ops, workingArgs)) guard Expression.isRecordType(ComponentReference.crefType(cref))
+      equation
       print("Start record case: " + ExpressionDump.printExpStr(inExp) + "\n");
       expList = Expression.expandExpression(inExp);
       crefList = list(Expression.expCref(e) for e in expList);
@@ -506,7 +514,8 @@ algorithm
       print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
       opds = listAppend(opdList,opds);
     then
-      (inExp, (opds, ops, workingArgs));
+      fail();
+      //(inExp, (opds, ops, workingArgs));
 
     case (DAE.CALL(path=Absyn.IDENT("der")), (opds, ops, workingArgs)) equation
       OPERAND_VAR(resVar)::rest = opds;
