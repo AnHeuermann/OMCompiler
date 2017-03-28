@@ -3376,6 +3376,22 @@ algorithm
       (equations_, uniqueEqIndex) = List.thread3MapFold(simVars, solvedVals, sources, generateSolvedEquation, iuniqueEqIndex);
     then (equations_, uniqueEqIndex, itempvars);
 
+    // Time varying jacobian with size 2 is solved via Cramer's rule
+    case (BackendDAE.FULL_JACOBIAN(SOME(jac)), BackendDAE.JAC_LINEAR()) guard Flags.getConfigBool(Flags.GEN_ADOLC_TRACE)
+      equation
+        if Flags.isSet(Flags.FAILTRACE) then
+          Debug.trace("function createOdeSystem2 create linear system(const jacobian).\n");
+        end if;
+        ((simVars, _)) = BackendVariable.traverseBackendDAEVars(inVars, traversingdlowvarToSimvar, ({}, inKnVars));
+        true = intEq(listLength(simVars), 2);
+        simVars = listReverse(simVars);
+        (beqs, _) = BackendDAEUtil.getEqnSysRhs(inEquationArray, inVars, SOME(inFuncs));
+        beqs = listReverse(beqs);
+        (equations_, uniqueEqIndex, tempvars) = generateEqnsCramerRule(jac, beqs, simVars,  iuniqueEqIndex, itempvars);
+        simJac = List.map1(jac, jacToSimjac, inVars);
+      then
+        (equations_, uniqueEqIndex, tempvars);
+
     // Time varying linear jacobian. Linear system of equations that needs to be solved during runtime.
     case (BackendDAE.FULL_JACOBIAN(SOME(jac)), BackendDAE.JAC_LINEAR()) equation
       if Flags.isSet(Flags.FAILTRACE) then
@@ -3425,6 +3441,132 @@ algorithm
     then fail();
   end matchcontinue;
 end createOdeSystem2;
+
+protected function generateEqnsCramerRule
+  input list<tuple<Integer, Integer, BackendDAE.Equation>> inMatrixA;
+  input list<DAE.Exp> inRHS;
+  input list<SimCodeVar.SimVar> iVarSolved;
+  input Integer iuniqueEqIndex;
+  input list<SimCodeVar.SimVar> itempvars;
+  output list<SimCode.SimEqSystem> equations_;
+  output Integer ouniqueEqIndex;
+  output list<SimCodeVar.SimVar> otempvars;
+algorithm
+  (equations_, ouniqueEqIndex, otempvars) :=
+  matchcontinue
+    (inMatrixA, inRHS, iVarSolved, iuniqueEqIndex, itempvars)
+    local
+      Integer uniqueEqIndex, uniqueEqIndex2;
+      list<BackendDAE.Equation> eqn_lst;
+      list<DAE.ComponentRef> crefs;
+      list<SimCodeVar.SimVar> simVars;
+      list<DAE.Exp> beqs;
+      list<tuple<Integer, Integer, BackendDAE.Equation>> jac, matrixA;
+      list<DAE.ComponentRef> names;
+      list<SimCodeVar.SimVar> tempvars;
+      String str;
+      SimCodeVar.SimVar tmpvar;
+      DAE.Exp a1, a2, a3, a4, detA1, detA2, detA;
+      DAE.Exp tmp1, tmp2;
+      BackendDAE.Equation eqn;
+      DAE.ComponentRef crtmp, detA1cr, detA2cr, detAcr;
+      DAE.Type tp;
+      list<SimCode.SimEqSystem> eqSystlst;
+
+      case (_,_,_,_,_)
+        equation
+          // sort list of matrix
+          //matrixA = List.sort(inMatrixA, Util.compare2TupleIntGt);
+          matrixA = inMatrixA;
+          //print("Create Cramer Ruler: \n");
+          //print("Matrix A :\n" +& BackendDump.dumpJacobianStr(SOME(matrixA)) +& "\n");
+          //print("RHS b :\n" +& ExpressionDump.printExpListStr(inRHS) +& "\n");
+          //print("x :\n" +& Tpl.tplString(SimCodeDump.dumpVarsShort, iVarSolved) +& "\n");
+          //tmp1_det<od> = det(A1) = inRHS(1) * inMatrixA(2,2) - inRHS(2) * inMatrixA(1,2)
+
+          //create tmpvar
+          tp = DAE.T_REAL_DEFAULT;
+          //detA1cr = ComponentReference.makeCrefIdent("$TMP_DET1_" +& intString(iuniqueEqIndex), tp , {});
+          //detA1 = Expression.crefExp(detA1cr);
+          //tempvars = greateTempVarsforCrefs({detA1}, itempvars);
+
+          a1 = listGet(inRHS, 1);
+          ((_, _, BackendDAE.RESIDUAL_EQUATION(exp = a2))) = listGet(matrixA, 2);
+          a3 = listGet(inRHS, 2);
+          ((_, _, BackendDAE.RESIDUAL_EQUATION(exp = a4))) = listGet(matrixA, 4);
+          //(tmp1,_) = ExpressionSimplify.simplify(DAE.BINARY(a1, DAE.MUL(tp), a4));
+          //(tmp2,_) = ExpressionSimplify.simplify(DAE.BINARY(a3, DAE.MUL(tp), a2));
+          //(detA1,_) = ExpressionSimplify.simplify(DAE.BINARY(tmp1, DAE.SUB(tp), tmp2));
+          tmp1 = DAE.BINARY(a1, DAE.MUL(tp), a4);
+          tmp2 = DAE.BINARY(a3, DAE.MUL(tp), a2);
+          detA1 = DAE.BINARY(tmp1, DAE.SUB(tp), tmp2);
+
+          //(tmp3,_) = ExpressionSimplify.simplify(DAE.BINARY(DAE.BINARY(a1, DAE.MUL(tp), a4), DAE.SUB(tp), DAE.BINARY(a3, DAE.MUL(tp), a2)));
+          //eqn = BackendDAE.SOLVED_EQUATION(detA1cr, tmp3, DAE.emptyElementSource, false);
+          //eqn_lst = {eqn};
+
+          //tmp2_det<od> = det(A2) = inMatrixA(1,1) * inRHS(2) - inMatrixA(2,1) * inRHS(1)
+
+          //create tmpvar
+          //tp = DAE.T_REAL_DEFAULT;
+          //detA2cr = ComponentReference.makeCrefIdent("$TMP_DET2_" +& intString(iuniqueEqIndex), tp , {});
+          //detA2 =Expression.crefExp(detA2cr);
+          //tempvars = greateTempVarsforCrefs({detA2}, tempvars);
+
+          ((_, _, BackendDAE.RESIDUAL_EQUATION(exp = a1))) = listGet(matrixA, 1);
+          a2 = listGet(inRHS, 1);
+          ((_, _, BackendDAE.RESIDUAL_EQUATION(exp = a3))) = listGet(matrixA, 3);
+          a4 = listGet(inRHS, 2);
+          //(tmp1,_) = ExpressionSimplify.simplify(DAE.BINARY(a1, DAE.MUL(tp), a4));
+          //(tmp2,_) = ExpressionSimplify.simplify(DAE.BINARY(a3, DAE.MUL(tp), a2));
+          //(detA2,_) = ExpressionSimplify.simplify(DAE.BINARY(tmp1, DAE.SUB(tp), tmp2));
+          tmp1 = DAE.BINARY(a1, DAE.MUL(tp), a4);
+          tmp2 = DAE.BINARY(a3, DAE.MUL(tp), a2);
+          detA2 = DAE.BINARY(tmp1, DAE.SUB(tp), tmp2);
+          //eqn = BackendDAE.SOLVED_EQUATION(detA2cr, tmp3, DAE.emptyElementSource, false);
+          //eqn_lst = listAppend({eqn}, eqn_lst);
+
+          //tmp2_det<od> = det(A2) = inMatrixA(1,1) * inRHS(2) - inMatrixA(2,1) * inRHS(1)
+
+          //create tmpvar
+          tp = DAE.T_REAL_DEFAULT;
+          detAcr = ComponentReference.makeCrefIdent("$TMP_DET_" + intString(iuniqueEqIndex), tp , {});
+          detA =Expression.crefExp(detAcr);
+          tempvars = createTempVarsforCrefs({detA}, itempvars);
+
+          ((_, _, BackendDAE.RESIDUAL_EQUATION(exp = a1))) = listGet(matrixA, 1);
+          ((_, _, BackendDAE.RESIDUAL_EQUATION(exp = a2))) = listGet(matrixA, 2);
+          ((_, _, BackendDAE.RESIDUAL_EQUATION(exp = a3))) = listGet(matrixA, 3);
+          ((_, _, BackendDAE.RESIDUAL_EQUATION(exp = a4))) = listGet(matrixA, 4);
+          //(tmp1,_) = ExpressionSimplify.simplify(DAE.BINARY(a1, DAE.MUL(tp), a4));
+          //(tmp2,_) = ExpressionSimplify.simplify(DAE.BINARY(a3, DAE.MUL(tp), a2));
+          //(detA,_) = ExpressionSimplify.simplify(DAE.BINARY(tmp1, DAE.SUB(tp), tmp2));
+          tmp1 = DAE.BINARY(a1, DAE.MUL(tp), a4);
+          tmp2 = DAE.BINARY(a3, DAE.MUL(tp), a2);
+          //detA = DAE.BINARY(tmp1, DAE.SUB(tp), tmp2);
+
+          eqn = BackendDAE.SOLVED_EQUATION(detAcr,  DAE.BINARY(tmp1, DAE.SUB(tp), tmp2), DAE.emptyElementSource, BackendDAE.EQ_ATTR_DEFAULT_DYNAMIC);
+          eqn_lst = {eqn};
+
+          // x1 = det(A1) / det(A)
+          crtmp = varName(listGet(iVarSolved, 1));
+          (tmp1, _) = ExpressionSimplify.simplify(DAE.BINARY(detA1, DAE.DIV(tp), detA));
+          eqn = BackendDAE.SOLVED_EQUATION(crtmp, tmp1, DAE.emptyElementSource, BackendDAE.EQ_ATTR_DEFAULT_DYNAMIC);
+          eqn_lst = listAppend({eqn}, eqn_lst);
+          // x2 = det(A2) / det(A)
+          crtmp = varName(listGet(iVarSolved, 2));
+          (tmp1,_) = ExpressionSimplify.simplify(DAE.BINARY(detA2, DAE.DIV(tp), detA));
+          eqn = BackendDAE.SOLVED_EQUATION(crtmp, tmp1, DAE.emptyElementSource, BackendDAE.EQ_ATTR_DEFAULT_DYNAMIC);
+          eqn_lst = listAppend({eqn}, eqn_lst);
+
+          (eqSystlst, uniqueEqIndex) = List.mapFold(listReverse(eqn_lst), makeSolved_SES_SIMPLE_ASSIGN, iuniqueEqIndex);
+        then (eqSystlst, uniqueEqIndex, tempvars);
+
+    else
+      then fail();
+
+   end matchcontinue;
+end generateEqnsCramerRule;
 
 protected function checkLinearSystem
   input Integer info;
