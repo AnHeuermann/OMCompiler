@@ -173,14 +173,25 @@ protected
   list<Integer> tmpLst;
   OperationData tmpOpData;
   list<OperationData> opDataFuncs;
+  constant Boolean debug = false;
 algorithm
   try
     numVariables := 2*varInfo.numStateVars + varInfo.numAlgVars;
     workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, numVariables, numVariables, varInfo.numParams);
 
+    if debug then
+      print("createOperationData equations input: \n");
+      print(Tpl.tplString3(TaskSystemDump.dumpEqs, inEquations, 0, false));
+    end if;
+
     // create operation of the equations
     (tmpOpData,workingArgs) := createOperationEqns(inEquations, workingArgs);
     
+    if debug then
+      print("createOperationData for functions: \n");
+      Util.stringDelimitListPrintBuf(list(Absyn.pathString(str) for str in workingArgs.funcNames) , " ");
+    end if;
+
     // create needed functions
     opDataFuncs := createOperationDataFuncs(workingArgs.funcNames, functionTree);
 
@@ -214,12 +225,19 @@ protected
   Integer numVars;
   OperationData optData;
   list<Integer> tmpLst;
+
+  constant Boolean debug = true;
 algorithm
   // get function for funcName
   // create OperationData for single func
   workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, 0, 0, 0);
   while not listEmpty(funcList) loop
     for funcName in funcList loop
+
+      if debug then
+        print("Create operation list for function : " + Absyn.pathString(funcName) + "\n");
+      end if;
+
       SOME(func) := DAE.AvlTreePathFunction.get(funcTree,funcName);
 
       inputVars := DAEUtil.getFunctionInputVars(func);
@@ -235,6 +253,12 @@ algorithm
       outputSimVars := SimCodeUtil.rewriteIndex(outputSimVars, listLength(inputSimVars));
       protectedSimVars := list( SimCodeUtil.makeTmpRealSimCodeVar(DAEUtil.varCref(v), BackendDAE.TMP_SIMVAR()) for v in protectedVars);
       protectedSimVars := SimCodeUtil.rewriteIndex(protectedSimVars, listLength(inputSimVars)+listLength(outputSimVars));
+
+      if debug then
+        SimCodeUtil.dumpVarLst(inputSimVars, "inputs ("+intString(listLength(inputSimVars))+"): ");
+        SimCodeUtil.dumpVarLst(outputSimVars, "outputs ("+intString(listLength(outputSimVars))+"): ");
+        SimCodeUtil.dumpVarLst(protectedSimVars, "protected ("+intString(listLength(protectedSimVars))+"): ");
+      end if;
 
       localHT := List.fold(inputSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
       localHT := List.fold(outputSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
@@ -285,10 +309,6 @@ protected
 algorithm
   try
     operations := {};
-    if debug then
-      print("createOperationData equations input: \n");
-      print(Tpl.tplString3(TaskSystemDump.dumpEqs, inEquations, 0, false));
-    end if;
     for eq in inEquations loop
       () := matchcontinue eq
       local
