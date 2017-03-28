@@ -463,6 +463,11 @@ algorithm
     then
       (inExp, (opds, ops, workingArgs));
 
+    case (e1 as DAE.ICONST(), (opds, ops, workingArgs)) equation
+      opds = OPERAND_CONST(e1)::opds;
+    then
+      (inExp, (opds, ops, workingArgs));
+
     case (DAE.CREF(componentRef=DAE.CREF_IDENT(ident="time"), ty=ty), (opds, ops, workingArgs)) equation
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       operation = OPERATION({OPERAND_TIME()}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
