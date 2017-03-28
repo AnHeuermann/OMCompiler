@@ -440,9 +440,10 @@ algorithm
   (outExp, outTpl) := matchcontinue (inExp, inTpl)
     local
       DAE.ComponentRef cref;
+      list<DAE.ComponentRef> crefList;
       SimCode.HashTableCrefToSimVar crefToSimVarHT;
       SimCodeVar.SimVar resVar, timeVar, paramVar, extraVar, startVar;
-      list<Operand> opds, rest;
+      list<Operand> opds, opdList, rest;
       list<Operation> ops;
       Operation operation;
       Operand result, firstArg;
@@ -456,6 +457,8 @@ algorithm
       String str;
       WorkingStateArgs workingArgs;
       Absyn.Path path;
+      list<DAE.Var> varLst;
+
       constant Boolean debug = true;
 
     case (e1 as DAE.RCONST(), (opds, ops, workingArgs)) equation
@@ -491,6 +494,17 @@ algorithm
     case (DAE.CREF(componentRef=cref), (opds, ops, workingArgs)) equation
       resVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
       opds = OPERAND_VAR(resVar)::opds;
+    then
+      (inExp, (opds, ops, workingArgs));
+
+    // records
+    case (DAE.CREF(componentRef=cref, ty=ty as DAE.T_COMPLEX(complexClassType=ClassInf.RECORD())), (opds, ops, workingArgs)) equation
+      print("Start record case: " + ExpressionDump.printExpStr(inExp) + "\n");
+      expList = Expression.expandExpression(inExp);
+      crefList = list(Expression.expCref(e) for e in expList);
+      opdList = list(OPERAND_VAR(BaseHashTable.get(cr, workingArgs.crefToSimVarHT)) for cr in crefList);
+      print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
+      opds = listAppend(opdList,opds);
     then
       (inExp, (opds, ops, workingArgs));
 
@@ -633,7 +647,8 @@ algorithm
     /* debug */
     case (_, _) guard debug
     equation
-      print(" Dump not handled exp : " + ExpressionDump.dumpExpStr(inExp,0) +"\n");
+      print(" Dump not handled exp : " + ExpressionDump.printExpStr(inExp) +"\n");
+      print(ExpressionDump.dumpExpStr(inExp,0) +"\n");
     then
       (inExp, inTpl);
 
