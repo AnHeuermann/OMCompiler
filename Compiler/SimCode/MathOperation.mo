@@ -226,7 +226,7 @@ protected
   OperationData optData;
   list<Integer> tmpLst;
 
-  constant Boolean debug = true;
+  constant Boolean debug = false;
 algorithm
   // get function for funcName
   // create OperationData for single func
@@ -244,14 +244,15 @@ algorithm
       outputVars :=  DAEUtil.getFunctionOutputVars(func);
       protectedVars := DAEUtil.getFunctionProtectedVars(func);
       bodyStmts := DAEUtil.getFunctionAlgorithmStmts(func);
+      bodyStmts := listReverse(bodyStmts);
       // create hashtable for inputs, outputs and protected
       localHT := HashTableCrefSimVar.emptyHashTable();
 
-      inputSimVars := list( SimCodeUtil.makeTmpRealSimCodeVar(DAEUtil.varCref(v), BackendDAE.TMP_SIMVAR()) for v in inputVars);
+      inputSimVars := createSimVarsFromElements(inputVars);
       inputSimVars := SimCodeUtil.rewriteIndex(inputSimVars, 0);
-      outputSimVars := list( SimCodeUtil.makeTmpRealSimCodeVar(DAEUtil.varCref(v), BackendDAE.TMP_SIMVAR()) for v in outputVars);
+      outputSimVars := createSimVarsFromElements(outputVars);
       outputSimVars := SimCodeUtil.rewriteIndex(outputSimVars, listLength(inputSimVars));
-      protectedSimVars := list( SimCodeUtil.makeTmpRealSimCodeVar(DAEUtil.varCref(v), BackendDAE.TMP_SIMVAR()) for v in protectedVars);
+      protectedSimVars := createSimVarsFromElements(protectedVars);
       protectedSimVars := SimCodeUtil.rewriteIndex(protectedSimVars, listLength(inputSimVars)+listLength(outputSimVars));
 
       if debug then
@@ -281,6 +282,46 @@ algorithm
     funcList := workingArgs.funcNames;
   end while;
 end createOperationDataFuncs;
+
+protected function createSimVarsFromElements
+  input list<DAE.Element> elmts; // DAE.VAR
+  output list<SimCodeVar.SimVar> simVars = {};
+protected
+  list<SimCodeVar.SimVar> tmpVars;
+  SimCodeVar.SimVar tmpVar;
+  list<DAE.ComponentRef> tmpCrefs;
+  list<DAE.Exp> tmpExpLst;
+  DAE.ComponentRef cref;
+  DAE.Type tp, tp2;
+algorithm
+
+  for elem in elmts loop
+    _ := match elem
+    case DAE.VAR() algorithm
+    cref := DAEUtil.varCref(elem);
+    // UGLY work-a-round get type of var by creating empty exp of dims
+    (_, tp) := Expression.makeZeroExpression(elem.dims);
+    cref := ComponentReference.crefSetType(cref, tp);
+    //print("Create SimVars for Cref: " + ComponentReference.debugPrintComponentRefTypeStr(cref) + " tp: " + Types.unparseType(tp) + " tp2: " + Types.unparseType(tp2) +"\n");
+    //print("inst dims: " + Util.stringDelimitList(list(intString(i) for i in  Expression.dimensionsList(elem.dims)), ",") + "\n");
+    _ := match cref
+      case (_) guard ComponentReference.isArrayElement(cref)
+      algorithm
+        tmpCrefs := ComponentReference.expandCref(cref, true);
+        tmpExpLst := List.map(tmpCrefs, Expression.crefExp);
+        tmpVars := SimCodeUtil.createArrayTempVar(cref, Expression.dimensionsList(elem.dims), tmpExpLst, {});
+        simVars := listAppend(tmpVars, simVars);
+      then ();
+      else
+      algorithm
+        tmpVar := SimCodeUtil.makeTmpRealSimCodeVar(cref, BackendDAE.TMP_SIMVAR());
+        simVars := tmpVar::simVars;
+      then ();
+    end match;
+    then ();
+    end match;
+  end for;
+end createSimVarsFromElements;
 
 protected function createOperationsForFunction
   input list<DAE.Statement> funcBody;
@@ -321,7 +362,6 @@ algorithm
         Operand assignOperand, simVarOperand;
         SimCodeVar.SimVar simVar;
         case SimCode.SES_SIMPLE_ASSIGN(index = index, exp = exp, cref = cref) equation
-          //operands = {};
           simVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
           simVarOperand = OPERAND_VAR(simVar);
           workingArgs.tmpIndex = workingArgs.numVariables;
@@ -335,6 +375,7 @@ algorithm
             op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
             operations = op::operations;
           end if;
+          //print("collectOperationsForFuncArgs operation : " +  printOperationStr(op) +"\n");
         then ();
 
         case SimCode.SES_ALGORITHM(index = index, statements=statements) equation
@@ -493,8 +534,9 @@ algorithm
     then
       (inExp, (opds, ops, workingArgs));
 
+    // actually just subscript, so ignore for now
     case (e1 as DAE.ICONST(), (opds, ops, workingArgs)) equation
-      opds = OPERAND_CONST(e1)::opds;
+      //opds = OPERAND_CONST(e1)::opds;
     then
       (inExp, (opds, ops, workingArgs));
 
@@ -542,6 +584,14 @@ algorithm
       cref = ComponentReference.crefPrefixDer(resVar.name);
       resVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
       opds = OPERAND_VAR(resVar)::rest;
+    then
+      (inExp, (opds, ops, workingArgs));
+
+    // cref array: the list is done already
+    case (DAE.ARRAY(array=expList), (opds, ops, workingArgs)) equation
+      //crefList = list(Expression.expCref(e) for e in expList);
+      //opdList = list(OPERAND_VAR(BaseHashTable.get(cr, workingArgs.crefToSimVarHT)) for cr in crefList);
+      //opds = listAppend(opdList,opds);
     then
       (inExp, (opds, ops, workingArgs));
 
@@ -650,14 +700,19 @@ algorithm
       if not List.isMemberOnTrue(path, workingArgs.funcNames, Absyn.pathEqual) then
         workingArgs.funcNames = path::workingArgs.funcNames;
       end if;
+      //print("collectOperationsForFuncArgs pre opds : " +  printOperandListStr(opds) +"\n");
 
       // process all call armugments by with expList
+      //print("collectOperationsForFuncArgs for : " + ExpressionDump.printExpListStr(expList) +"\n");
       (firstArg, opds, ops, workingArgs) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
+      //print("collectOperationsForFuncArgs opds : " +  printOperandListStr(opds) +"\n");
 
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
       result = OPERAND_VAR(resVar);
+      //print("collectOperationsForFuncArgs opds : " +  printOperandStr(result) +"\n");
       operation = OPERATION({firstArg, OPERAND_INDEX(listLength(expList)), OPERAND_INDEX(1)}, MODELICA_CALL(ident), result);
+      //print("collectOperationsForFuncArgs operation : " +  printOperationStr(operation) +"\n");
       ops = operation::ops;
     then
       (inExp, (result::opds, ops, workingArgs));
@@ -676,7 +731,7 @@ algorithm
     /* debug */
     case (_, _) guard debug
     equation
-      print(" Dump not handled exp : " + ExpressionDump.printExpStr(inExp) +"\n");
+      print("Dump not handled exp : " + ExpressionDump.printExpStr(inExp) +"\n");
       print(ExpressionDump.dumpExpStr(inExp,0) +"\n");
     then
       (inExp, inTpl);

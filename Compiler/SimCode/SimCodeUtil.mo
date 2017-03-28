@@ -2821,7 +2821,7 @@ algorithm
   end match;
 end createTmpCrefExpsForComplexEqnSys_work;
 
-protected function createArrayTempVar
+public function createArrayTempVar
   input DAE.ComponentRef name;
   input list<Integer> dims;
   input list<DAE.Exp> inTmpCrefsLst;
