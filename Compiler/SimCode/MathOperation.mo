@@ -805,6 +805,20 @@ algorithm
         op = OPERATION({OPERAND_CONST(Expression.invertReal(exp)), opd2}, MUL(isActive), result);
       end if;
     then ();
+    case DAE.POW(ty) equation
+      (resVar, outIndex) = createSimTmpVar(inIndex, ty);
+      result = OPERAND_VAR(resVar);
+      (opds, extraOps, isActive, isCommuted) = checkOperand(inOpds);
+      //print("Pow case isActive: " + boolString(isActive) + "\n");
+      //print("createBinaryOperation opds : " +  printOperandListStr(opds) +"\n");
+      if not isActive then
+        (opd1 as OPERAND_CONST(exp))::opd2::{} = opds;
+        op = OPERATION({opd2,opd1}, POW(), result);
+      else
+        fail();
+      end if;
+      //print("Pow case op: " + printOperationStr(op) + "\n");
+    then ();
     else
       fail();
   end match;
