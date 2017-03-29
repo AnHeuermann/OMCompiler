@@ -202,6 +202,13 @@ algorithm
 
     tmpOpData.name := modelName;
 
+    if debug then
+      print("Created operations for model: " + modelName +
+            " (Ind:" + intString(listLength(independents)) +
+            " , Dep:" + intString(listLength(dependents)) + ")" +
+            "\n");
+    end if;
+
     outOperationData := tmpOpData::opDataFuncs;
   else
     outOperationData := {};
@@ -691,7 +698,6 @@ algorithm
     equation
       _::opds = opds;
       startVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
-      opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
       operation = OPERATION({OPERAND_INDEX(startVar.index+(workingArgs.numParameters+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
@@ -813,7 +819,7 @@ algorithm
       //print("createBinaryOperation opds : " +  printOperandListStr(opds) +"\n");
       if not isActive then
         (opd1 as OPERAND_CONST(exp))::opd2::{} = opds;
-        op = OPERATION({opd2,opd1}, POW(), result);
+        op = OPERATION({opd1,opd2}, POW(), result);
       else
         fail();
       end if;
