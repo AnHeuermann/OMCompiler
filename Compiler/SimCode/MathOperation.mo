@@ -526,6 +526,7 @@ algorithm
       WorkingStateArgs workingArgs;
       Absyn.Path path;
       list<DAE.Var> varLst;
+      list<DAE.Subscript> subs;
 
       constant Boolean debug = true;
 
@@ -534,9 +535,8 @@ algorithm
     then
       (inExp, (opds, ops, workingArgs));
 
-    // actually just subscript, so ignore for now
     case (e1 as DAE.ICONST(), (opds, ops, workingArgs)) equation
-      //opds = OPERAND_CONST(e1)::opds;
+      opds = OPERAND_CONST(e1)::opds;
     then
       (inExp, (opds, ops, workingArgs));
 
@@ -552,6 +552,7 @@ algorithm
       paramVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
       //guard
       BackendDAE.PARAM() = paramVar.varKind;
+      opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
       operation = OPERATION({OPERAND_INDEX(paramVar.index+1)}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
@@ -562,18 +563,23 @@ algorithm
 
     case (DAE.CREF(componentRef=cref), (opds, ops, workingArgs)) equation
       resVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+      opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       opds = OPERAND_VAR(resVar)::opds;
+      // debug
+      //print("Start cref case: " + ExpressionDump.printExpStr(inExp) + "\n");
+      //print("Subs: " + ComponentReference.printComponentRef2Str("test", subs) + "\n");
+      //print("res Var cref: " + printOperandListStr(opds) + "\n");
     then
       (inExp, (opds, ops, workingArgs));
 
     // records
     case (DAE.CREF(componentRef=cref), (opds, ops, workingArgs)) guard Expression.isRecordType(ComponentReference.crefType(cref))
       equation
-      print("Start record case: " + ExpressionDump.printExpStr(inExp) + "\n");
+      //print("Start record case: " + ExpressionDump.printExpStr(inExp) + "\n");
       expList = Expression.expandExpression(inExp);
       crefList = list(Expression.expCref(e) for e in expList);
       opdList = list(OPERAND_VAR(BaseHashTable.get(cr, workingArgs.crefToSimVarHT)) for cr in crefList);
-      print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
+      //print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
       opds = listAppend(opdList,opds);
     then
       fail();
@@ -583,6 +589,7 @@ algorithm
       OPERAND_VAR(resVar)::rest = opds;
       cref = ComponentReference.crefPrefixDer(resVar.name);
       resVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+      opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       opds = OPERAND_VAR(resVar)::rest;
     then
       (inExp, (opds, ops, workingArgs));
@@ -680,15 +687,16 @@ algorithm
     then
       (inExp, (result::rest, ops, workingArgs));
 
-    case (DAE.CALL(path=Absyn.IDENT("$_start"),  expLst={DAE.CREF(componentRef=cref)}, attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
+    case (DAE.CALL(path=Absyn.IDENT("$_start"),  expLst={e1 as DAE.CREF(componentRef=cref)}, attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
     equation
-      _::rest = opds;
+      _::opds = opds;
       startVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+      opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
       operation = OPERATION({OPERAND_INDEX(startVar.index+(workingArgs.numParameters+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
-      opds = OPERAND_VAR(resVar)::rest;
+      opds = OPERAND_VAR(resVar)::opds;
     then
       (inExp, (opds, ops, workingArgs));
 
