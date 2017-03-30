@@ -549,6 +549,7 @@ algorithm
 
     case (DAE.CREF(componentRef=DAE.CREF_IDENT(ident="time"), ty=ty), (opds, ops, workingArgs)) equation
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      workingArgs.tmpIndex = tmpIndex;
       operation = OPERATION({OPERAND_TIME()}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::opds;
