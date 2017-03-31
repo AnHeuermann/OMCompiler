@@ -99,8 +99,6 @@ public uniontype MathOperator
   record DIV
     Boolean isActive;
   end DIV;
-  record POW
-  end POW;
   record UNARY_NEG
   end UNARY_NEG;
   record UNARY_CALL
@@ -618,6 +616,40 @@ algorithm
     then
       (inExp, (result::rest, ops, workingArgs));
 
+    case (DAE.BINARY(operator = DAE.POW(ty=ty)), (opds, ops, workingArgs)) equation
+    opd2::opd1::rest = opds;
+    _ = match(opd1, opd2)
+      case (OPERAND_VAR(_), OPERAND_CONST(_)) equation
+        (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+        result = OPERAND_VAR(resVar);
+        operation = OPERATION({opd1,opd2}, UNARY_CALL("pow"), result);
+        ops = operation::ops;
+      then ();
+      case (OPERAND_CONST(e1), OPERAND_VAR(_)) equation
+        op = DAE.MUL(ty);
+        (operation, result, tmpIndex) = createBinaryOperation(op, {OPERAND_CONST(logReal(e1)),opd2}, workingArgs.tmpIndex);
+        ops = operation::ops;
+        operation = OPERATION({result}, UNARY_CALL("exp"), result);
+        ops = operation::ops;
+        then ();
+      case (OPERAND_VAR(_), OPERAND_VAR(_)) equation
+        (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+        result = if isTmpOperand(opd1) then opd1 else OPERAND_VAR(resVar);
+        operation = OPERATION({opd1}, UNARY_CALL("log"), result);
+        ops = operation::ops;
+        op = DAE.MUL(ty);
+        (operation, opd3, tmpIndex) = createBinaryOperation(op, {result,opd2}, workingArgs.tmpIndex);
+        operation = replaceOperationResult(operation, result);
+        tmpIndex = workingArgs.tmpIndex;
+        ops = operation::ops;
+        operation = OPERATION({result}, UNARY_CALL("exp"), result);
+        ops = operation::ops;
+      then ();
+    end match;
+    workingArgs.tmpIndex = tmpIndex;
+    then
+      (inExp, (result::rest, ops, workingArgs));
+
     case (DAE.RELATION(operator = op), (opds, ops, workingArgs)) equation
       opd2::opd1::rest = opds;
       (operation, result, tmpIndex) = createRelationOperation(op, {opd1,opd2}, workingArgs.tmpIndex);
@@ -812,20 +844,6 @@ algorithm
         op = OPERATION({OPERAND_CONST(Expression.invertReal(exp)), opd2}, MUL(isActive), result);
       end if;
     then ();
-    case DAE.POW(ty) equation
-      (resVar, outIndex) = createSimTmpVar(inIndex, ty);
-      result = OPERAND_VAR(resVar);
-      (opds, extraOps, isActive, isCommuted) = checkOperand(inOpds);
-      //print("Pow case isActive: " + boolString(isActive) + "\n");
-      //print("createBinaryOperation opds : " +  printOperandListStr(opds) +"\n");
-      if not isActive then
-        (opd1 as OPERAND_CONST(exp))::opd2::{} = opds;
-        op = OPERATION({opd1,opd2}, POW(), result);
-      else
-        fail();
-      end if;
-      //print("Pow case op: " + printOperationStr(op) + "\n");
-    then ();
     else
       fail();
   end match;
@@ -1006,6 +1024,27 @@ algorithm
   end for;
 end isTransformingMathFunction;
 
+protected function logReal
+  input DAE.Exp inExp;
+  output DAE.Exp outExp;
+algorithm
+  outExp := match(inExp)
+  local
+     Integer i;
+     Real r;
+    case (DAE.ICONST(i))
+    equation
+      r = log(i);
+    then DAE.RCONST(r);
+    case (DAE.RCONST(r))
+      equation
+        r = log(r);
+      then DAE.RCONST(r);
+    else fail();
+  end match;
+end logReal;
+
+
 ///////////////////////
 /* Dumping functions */
 ///////////////////////
@@ -1096,9 +1135,6 @@ algorithm
 
     case DIV(b)
     then "div" + (if b then "_a" else "_d") + "_a";
-
-    case POW()
-    then "pow_op";
 
     case UNARY_NEG()
     then "neg_sign_a";
