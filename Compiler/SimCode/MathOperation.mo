@@ -662,7 +662,7 @@ algorithm
       (operation, opd2, tmpIndex) = createBinaryOperation(op, {opd2,result}, workingArgs.tmpIndex);
       ops = operation::ops;
 
-      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1, opd2}, UNARY_CALL("atan"), result);
