@@ -677,6 +677,25 @@ algorithm
     then
       (inExp, (result::rest, ops, workingArgs));
 
+    case (DAE.CALL(path=Absyn.IDENT("tan"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
+    equation
+      opd1::rest = opds;
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      opd2 = OPERAND_VAR(resVar);
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      opd3 = OPERAND_VAR(resVar);
+      (extraVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      operation = OPERATION({opd1,OPERAND_VAR(extraVar)}, UNARY_CALL("sin"), opd2);
+      ops = operation::ops;
+      operation = OPERATION({opd1,OPERAND_VAR(extraVar)}, UNARY_CALL("cos"), opd3);
+      ops = operation::ops;
+      op = DAE.DIV(ty);
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd2,opd3}, workingArgs.tmpIndex);
+      ops = operation::ops;
+      workingArgs.tmpIndex = tmpIndex;
+    then
+      (inExp, (result::rest, ops, workingArgs));
+
     case (DAE.CALL(path=Absyn.IDENT("atan"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
     equation
       opd1::rest = opds;
@@ -693,11 +712,65 @@ algorithm
       op = DAE.DIV(ty);
       (operation, opd2, tmpIndex) = createBinaryOperation(op, {opd2,result}, workingArgs.tmpIndex);
       ops = operation::ops;
-
       (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1, opd2}, UNARY_CALL("atan"), result);
+      ops = operation::ops;
+    then
+      (inExp, (result::rest, ops, workingArgs));
+
+    case (DAE.CALL(path=Absyn.IDENT("asin"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
+    equation
+      opd1::rest = opds;
+      // tmp = operation x^2
+      op = DAE.MUL(ty);
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd1}, workingArgs.tmpIndex);
+      ops = operation::ops;
+      // tmp = operation 1 - tmp
+      op = DAE.SUB(ty);
+      opd2 = OPERAND_CONST(DAE.RCONST(1.0));
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd2,result}, workingArgs.tmpIndex);
+      ops = operation::ops;
+      // tmp = sqrt(tmp)
+      operation = OPERATION({result}, UNARY_CALL("sqrt"), result);
+      ops = operation::ops;
+      // opd2 = 1 / tmp
+      op = DAE.DIV(ty);
+      (operation, opd2, tmpIndex) = createBinaryOperation(op, {opd2,result}, workingArgs.tmpIndex);
+      ops = operation::ops;
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      workingArgs.tmpIndex = tmpIndex;
+      result = OPERAND_VAR(resVar);
+      operation = OPERATION({opd1, opd2}, UNARY_CALL("asin"), result);
+      ops = operation::ops;
+    then
+      (inExp, (result::rest, ops, workingArgs));
+
+    case (DAE.CALL(path=Absyn.IDENT("acos"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
+    equation
+      opd1::rest = opds;
+      // tmp = operation x^2
+      op = DAE.MUL(ty);
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd1}, workingArgs.tmpIndex);
+      ops = operation::ops;
+      // tmp = operation 1 - tmp
+      op = DAE.SUB(ty);
+      opd2 = OPERAND_CONST(DAE.RCONST(1.0));
+      (operation, result, tmpIndex) = createBinaryOperation(op, {opd2,result}, workingArgs.tmpIndex);
+      ops = operation::ops;
+      // tmp = sqrt(tmp)
+      operation = OPERATION({result}, UNARY_CALL("sqrt"), result);
+      ops = operation::ops;
+      // opd2 = - 1 / tmp
+      opd2 = OPERAND_CONST(DAE.RCONST(-1.0));
+      op = DAE.DIV(ty);
+      (operation, opd2, tmpIndex) = createBinaryOperation(op, {opd2,result}, workingArgs.tmpIndex);
+      ops = operation::ops;
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      workingArgs.tmpIndex = tmpIndex;
+      result = OPERAND_VAR(resVar);
+      operation = OPERATION({opd1, opd2}, UNARY_CALL("acos"), result);
       ops = operation::ops;
     then
       (inExp, (result::rest, ops, workingArgs));
