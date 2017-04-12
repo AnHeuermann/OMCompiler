@@ -367,7 +367,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       //dasslData->adolc_num_params = stats[NUM_PARAM];
       //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
       //write_ascii_trace(filename2, 0);
-      dasslData->residualFunction = functionODE_residualADOLC;
+      //dasslData->residualFunction = functionODE_residualADOLC;
       dasslData->jacobianFunction =  JacobianADOLC;
       if(measure_time_flag)
       {
@@ -1333,6 +1333,10 @@ int functionODE_residualADOLC(double *t, double *y, double *yd, double* cj, doub
   threadData_t *threadData = (threadData_t*)((double**)rpar)[2];
 
   long i;
+
+  printCurrentStatesVector(LOG_DASSL_STATES, y, data, *t);
+  printVector(LOG_DASSL_STATES, "yd", yd, data->modelData->nStates, *t);
+
   /* the first argument is the same number as in function name after system */
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
   updateTimeParamLoc(dasslData->adolcParam, *t);

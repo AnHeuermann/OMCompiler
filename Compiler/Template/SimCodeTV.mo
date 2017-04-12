@@ -1042,6 +1042,12 @@ package MathOperation
 	  record MODELICA_CALL
 	    Absyn.Ident ident;
 	  end MODELICA_CALL;
+    record COND_ASSIGN
+    end COND_ASSIGN;
+    record COND_EQ_ASSIGN
+    end COND_EQ_ASSIGN;
+	  record EXT_DIFF_V2
+    end EXT_DIFF_V2;
   end MathOperator;
 
   uniontype Operand

@@ -111,6 +111,8 @@ public uniontype MathOperator
   end COND_ASSIGN;
   record COND_EQ_ASSIGN
   end COND_EQ_ASSIGN;
+  record EXT_DIFF_V2
+  end EXT_DIFF_V2;
 end MathOperator;
 
 public uniontype Operand
@@ -360,12 +362,18 @@ algorithm
       local
         Integer index;
         DAE.Exp exp;
+        list<DAE.Exp> expLst;
         DAE.ComponentRef cref;
         list<Operation> rest;
         Operation op;
         list<Operand> operands;
-        Operand assignOperand, simVarOperand;
+        Operand assignOperand, simVarOperand, result;
         SimCodeVar.SimVar simVar;
+        list<SimCodeVar.SimVar> vars;
+        list<tuple<Integer, Integer, SimCode.SimEqSystem>> simJac;
+        Integer i, nnz, indexB, nb,  indexA, indexX, row, col, nx;
+        list<Operand> intOpds = {};
+
         case SimCode.SES_SIMPLE_ASSIGN(index = index, exp = exp, cref = cref) equation
           simVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
           simVarOperand = OPERAND_VAR(simVar);
@@ -387,6 +395,86 @@ algorithm
           workingArgs.tmpIndex = workingArgs.numVariables;
           (tmpOps, workingArgs) = createOperationDataStmts(statements, workingArgs);
           operations = listAppend(tmpOps, operations); 
+        then ();
+
+        case SimCode.SES_LINEAR(lSystem=SimCode.LINEARSYSTEM(vars=vars, beqs=expLst, simJac=simJac, jacobianMatrix = NONE())) algorithm
+
+          // create location for b
+          nb := listLength(expLst);
+          indexB := workingArgs.tmpIndex;
+          workingArgs.tmpIndex := workingArgs.tmpIndex+nb;
+          i := 0;
+
+          for exp in expLst loop
+            (assignOperand, operations, workingArgs) := collectOperationsForExp(exp, operations, workingArgs);
+            simVarOperand := OPERAND_INDEX(indexB + i);
+            if isTmpOperand(assignOperand) then
+              op::rest := operations;
+              op := replaceOperationResult(op, simVarOperand);
+              operations := op::rest;
+            elseif isConstOperand(assignOperand) then
+              op := OPERATION({assignOperand}, ASSIGN_PASSIVE(), simVarOperand);
+              operations := op::operations;
+            else
+              op := OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+              operations := op::operations;
+            end if;
+            i := i + 1;
+          end for;
+
+
+          // creat locations for A
+          nnz := listLength(simJac);
+          indexA := workingArgs.tmpIndex;
+          workingArgs.tmpIndex := workingArgs.tmpIndex+nnz;
+          i := 0;
+
+          for tpl in simJac loop
+            (row,col,SimCode.SES_RESIDUAL(exp=exp)) := tpl;
+            intOpds := OPERAND_INDEX(col)::OPERAND_INDEX(row)::intOpds;
+            (assignOperand, operations, workingArgs) := collectOperationsForExp(exp, operations, workingArgs);
+            simVarOperand := OPERAND_INDEX(indexA + i);
+
+            if isTmpOperand(assignOperand) then
+              op::rest := operations;
+              op := replaceOperationResult(op, simVarOperand);
+              operations := op::rest;
+            elseif isConstOperand(assignOperand) then
+              op := OPERATION({assignOperand}, ASSIGN_PASSIVE(), simVarOperand);
+              operations := op::operations;
+            else
+              op := OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+              operations := op::operations;
+            end if;
+            i := i + 1;
+          end for;
+          intOpds := listReverse(intOpds);
+
+          // tmp var x
+          nx := listLength(vars);
+          indexX := workingArgs.tmpIndex;
+          workingArgs.tmpIndex := workingArgs.tmpIndex+nx;
+
+          // create operation for ext diff call
+          i := listLength(intOpds);
+          intOpds := OPERAND_INDEX(0)::OPERAND_INDEX(i)::intOpds;
+          intOpds := listAppend(intOpds, {OPERAND_INDEX(i),OPERAND_INDEX(2),OPERAND_INDEX(1),OPERAND_INDEX(nnz),
+                               OPERAND_INDEX(indexA), OPERAND_INDEX(nb), OPERAND_INDEX(indexB),
+                               OPERAND_INDEX(nx), OPERAND_INDEX(indexX), OPERAND_INDEX(2)});
+          result := OPERAND_INDEX(1);
+          op := OPERATION(intOpds, EXT_DIFF_V2(), result);
+          operations := op::operations;
+
+          // assign x = tmpVars
+          i := 0;
+          for v in vars loop
+            simVar := BaseHashTable.get(v.name, workingArgs.crefToSimVarHT);
+            op := OPERATION({OPERAND_INDEX(indexX+i)}, ASSIGN_ACTIVE(), OPERAND_VAR(simVar));
+            operations := op::operations;
+
+            i := i + 1;
+          end for;
+
         then ();
 
         else
@@ -445,7 +533,22 @@ algorithm
           end if;
           //print(" ops: " + printOperationStr(op) + "\n");
         then ();
+/*
+        case(DAE.STMT_TUPLE_ASSIGN(expExpLst=expLst, exp=rhs)) equation
+          // rhs -> list<assignOperand>
+          (assignOperand, outOperations, workingArgs) = collectOperationsForExp(rhs, outOperations, workingArgs);
+          // lhs -> list<simVarOperand>
+          for exp in expExpLst loop
+            //
+            cref = Expression.expCref(exp);
+            simVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+            simVarOperand = OPERAND_VAR(simVar);
 
+          end for;
+          // assign operation list<assignOperand>  list<simVarOperand>
+          op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+        then()
+*/
         else
         algorithm
           print("Warning not handled stmt: " + DAEDump.ppStatementStr(stmt) + "\n");
@@ -1024,6 +1127,20 @@ algorithm
   end matchcontinue;
 end isTmpOperand;
 
+protected function isConstOperand
+  input Operand inOperand;
+  output Boolean outBoolean;
+algorithm
+  outBoolean := matchcontinue inOperand
+  local
+
+    case OPERAND_CONST()
+    then true;
+
+    else false;
+  end matchcontinue;
+end isConstOperand;
+
 protected function replaceOperationResult
   input Operation inOp;
   input Operand inOpd;
@@ -1223,6 +1340,9 @@ algorithm
 
     case COND_EQ_ASSIGN()
     then "cond_eq_assign";
+
+    case EXT_DIFF_V2()
+    then "ext_diff_v2";
   end match;
 end printOperatorStr;
 

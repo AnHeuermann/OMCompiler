@@ -991,7 +991,7 @@ algorithm
   end match;
 end getClockIndex;
 
-protected function getSimVarCompRef
+public function getSimVarCompRef
   input SimCodeVar.SimVar inVar;
   output DAE.ComponentRef outComp;
 algorithm
