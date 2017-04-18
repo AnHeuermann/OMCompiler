@@ -304,7 +304,7 @@ protected
   list<DAE.ComponentRef> tmpCrefs;
   list<DAE.Exp> tmpExpLst;
   DAE.ComponentRef cref;
-  DAE.Type tp, tp2;
+  DAE.Type tp;
 algorithm
   for elem in elmts loop
     _ := match elem
@@ -313,7 +313,7 @@ algorithm
     // UGLY work-a-round get type of var by creating empty exp of dims
     (_, tp) := Expression.makeZeroExpression(elem.dims);
     cref := ComponentReference.crefSetType(cref, tp);
-    //print("Create SimVars for Cref: " + ComponentReference.debugPrintComponentRefTypeStr(cref) + " tp: " + Types.unparseType(tp) + " tp2: " + Types.unparseType(tp2) +"\n");
+    //print("Create SimVars for Cref: " + ComponentReference.debugPrintComponentRefTypeStr(cref) + " tp: " + Types.unparseType(tp) +"\n");
     //print("inst dims: " + Util.stringDelimitList(list(intString(i) for i in  Expression.dimensionsList(elem.dims)), ",") + "\n");
     _ := match cref
       case (_) guard ComponentReference.isArrayElement(cref)
@@ -547,21 +547,16 @@ algorithm
     for stmt in inStmts loop
       () := matchcontinue stmt
         local
-          Integer index;
           DAE.Exp rhs, lhs;
           list<DAE.Exp> expLst;
-          DAE.ComponentRef cref;
           list<Operation> rest;
           Operation op;
           Operand assignOperand, simVarOperand;
           list<Operand> assignOperands = {};
-          SimCodeVar.SimVar simVar;
 
         // STMT_ASSIGN
         case DAE.STMT_ASSIGN(exp=rhs, exp1=lhs) equation
-          cref = Expression.expCref(lhs);
-          simVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
-          simVarOperand = OPERAND_VAR(simVar);
+          simVarOperand = generateOperandForExp(lhs, workingArgs.crefToSimVarHT);
           workingArgs.tmpIndex = workingArgs.numVariables;
           ({assignOperand}, outOperations, workingArgs) = collectOperationsForExp(rhs, outOperations, workingArgs);
           if isTmpOperand(assignOperand) then
@@ -593,9 +588,7 @@ algorithm
 
           // lhs -> list<simVarOperand> and assign operation list<assignOperand> <--> list<simVarOperand>
           for exp in expLst loop
-            cref := Expression.expCref(exp);
-            simVar := BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
-            simVarOperand := OPERAND_VAR(simVar);
+            simVarOperand := generateOperandForExp(exp, workingArgs.crefToSimVarHT);
             assignOperand::assignOperands := assignOperands;
             op := OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
             outOperations := op::outOperations;
@@ -630,6 +623,21 @@ algorithm
   end try;
 end createOperationDataStmts;
 
+
+protected function generateOperandForExp
+  "Generates an OPERAND_VAR for a given DAE.Exp and crefToSimVarHT."
+  input DAE.Exp inExp;
+  input SimCode.HashTableCrefToSimVar inCrefToSimVarHT;
+  output Operand outSimVarOperand;
+protected
+  DAE.ComponentRef cref;
+  SimCodeVar.SimVar simVar;
+algorithm
+  cref := Expression.expCref(inExp);
+  simVar := BaseHashTable.get(cref, inCrefToSimVarHT);
+  outSimVarOperand := OPERAND_VAR(simVar);
+end generateOperandForExp;
+
 protected function collectOperationsForFuncArgs
   input list<DAE.Exp> inExpLst;
   input list<Operand> inOpds;
@@ -640,7 +648,6 @@ protected function collectOperationsForFuncArgs
   output list<Operation> outOps = inOps;
   output WorkingStateArgs workingArgs = inWorkingArgs;
 protected
-  list<Operation> rest;
   Integer tmpIndex, argsIndex;
   SimCodeVar.SimVar simVar;
   Operand assignOperand, simVarOperand ;
@@ -685,38 +692,32 @@ algorithm
       DAE.ComponentRef cref;
       list<DAE.ComponentRef> crefList;
       SimCode.HashTableCrefToSimVar crefToSimVarHT;
-      SimCodeVar.SimVar resVar, timeVar, paramVar, extraVar, startVar;
-      list<Operand> opds, opdList, rest;
+      SimCodeVar.SimVar resVar, timeVar, paramVar;
+      list<Operand> opds, opdList, rest, results;
       list<Operation> ops;
       Operation operation;
-      Operand result, firstArg;
-      DAE.Exp e1,e2,e3;
+      Operand result, firstArg, opd1, opd2, opd3;
+      DAE.Exp e1, e2, e3;
       list<DAE.Exp> expList;
-      DAE.Type ty;
-      DAE.Operator op;
-      Integer tmpIndex, numRes;
-      Operand opd1, opd2, opd3;
-      Absyn.Ident ident;
-      String str;
-      WorkingStateArgs workingArgs;
-      Absyn.Path path;
       list<DAE.Var> varLst;
       list<DAE.Subscript> subs;
-      list<SimCodeVar.SimVar> resVarLst;
-      list<Operand> results;
+      DAE.Type ty;
+      DAE.Operator op;
+      Integer tmpIndex;
+      Absyn.Ident ident;
+      Absyn.Path path;
+      WorkingStateArgs workingArgs;
       constant Boolean debug = false;
 
     // ICONST
     case (e1 as DAE.ICONST(), (opds, ops, workingArgs)) equation
       opds = OPERAND_CONST(e1)::opds;
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // RCONST
     case (e1 as DAE.RCONST(), (opds, ops, workingArgs)) equation
       opds = OPERAND_CONST(e1)::opds;
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // CREF, time
     case (DAE.CREF(componentRef=DAE.CREF_IDENT(ident="time"), ty=ty), (opds, ops, workingArgs)) equation
@@ -725,8 +726,7 @@ algorithm
       operation = OPERATION({OPERAND_TIME()}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::opds;
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // CREF, ty
     case (DAE.CREF(componentRef=cref, ty=ty), (opds, ops, workingArgs)) equation
@@ -739,8 +739,7 @@ algorithm
       operation = OPERATION({OPERAND_INDEX(paramVar.index+1)}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::opds;
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // CREF
     case (DAE.CREF(componentRef=cref), (opds, ops, workingArgs)) equation
@@ -751,8 +750,7 @@ algorithm
       //print("Start cref case: " + ExpressionDump.printExpStr(inExp) + "\n");
       //print("Subs: " + ComponentReference.printComponentRef2Str("test", subs) + "\n");
       //print("res Var cref: " + printOperandListStr(opds) + "\n");
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // CREF, records
     case (DAE.CREF(componentRef=cref), (opds, ops, workingArgs))
@@ -763,9 +761,8 @@ algorithm
       crefList = list(Expression.expCref(e) for e in expList);
       opdList = list(OPERAND_VAR(BaseHashTable.get(cr, workingArgs.crefToSimVarHT)) for cr in crefList);
       //print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
-      opds = listAppend(opdList,opds);
-    then
-      fail();
+      opds = listAppend(opdList, opds);
+    then fail();
       //(inExp, (opds, ops, workingArgs));
 
     // CALL, der
@@ -775,16 +772,14 @@ algorithm
       resVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
       opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       opds = OPERAND_VAR(resVar)::rest;
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // cref array: the list is done already
     case (DAE.ARRAY(array=expList), (opds, ops, workingArgs)) equation
       //crefList = list(Expression.expCref(e) for e in expList);
       //opdList = list(OPERAND_VAR(BaseHashTable.get(cr, workingArgs.crefToSimVarHT)) for cr in crefList);
       //opds = listAppend(opdList,opds);
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // BINARY
     case (DAE.BINARY(operator=op), (opds, ops, workingArgs)) equation
@@ -792,8 +787,7 @@ algorithm
       (operation, result, tmpIndex) = createBinaryOperation(op, {opd1, opd2}, workingArgs.tmpIndex);
       workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // BINARY, POW
     case (DAE.BINARY(operator=DAE.POW(ty=ty)), (opds, ops, workingArgs)) equation
@@ -827,8 +821,7 @@ algorithm
         then ();
       end match;
       workingArgs.tmpIndex = tmpIndex;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // RELATION
     case (DAE.RELATION(operator=op), (opds, ops, workingArgs)) equation
@@ -836,8 +829,7 @@ algorithm
       (operation, result, tmpIndex) = createRelationOperation(op, {opd1,opd2}, workingArgs.tmpIndex);
       workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // IFEXP
     case (DAE.IFEXP(expCond=e1, expThen=e2, expElse=e3), (opds, ops, workingArgs)) equation
@@ -847,8 +839,7 @@ algorithm
       operation = OPERATION({opd1,opd2,opd3}, checkRelation(e1), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::rest;
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // CALL, DIVISION
     case (DAE.CALL(path=Absyn.IDENT("DIVISION"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
@@ -857,8 +848,7 @@ algorithm
       (operation, result, tmpIndex) = createBinaryOperation(op, {opd1,opd2}, workingArgs.tmpIndex);
       workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // CALL, tan
     case (DAE.CALL(path=Absyn.IDENT("tan"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs)) equation
@@ -867,17 +857,16 @@ algorithm
       opd2 = OPERAND_VAR(resVar);
       (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
       opd3 = OPERAND_VAR(resVar);
-      (extraVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
-      operation = OPERATION({opd1,OPERAND_VAR(extraVar)}, UNARY_CALL("sin"), opd2);
+      (paramVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      operation = OPERATION({opd1,OPERAND_VAR(paramVar)}, UNARY_CALL("sin"), opd2);
       ops = operation::ops;
-      operation = OPERATION({opd1,OPERAND_VAR(extraVar)}, UNARY_CALL("cos"), opd3);
+      operation = OPERATION({opd1,OPERAND_VAR(paramVar)}, UNARY_CALL("cos"), opd3);
       ops = operation::ops;
       op = DAE.DIV(ty);
       (operation, result, tmpIndex) = createBinaryOperation(op, {opd2,opd3}, workingArgs.tmpIndex);
       ops = operation::ops;
       workingArgs.tmpIndex = tmpIndex;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // CALL, atan
     case (DAE.CALL(path=Absyn.IDENT("atan"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs)) equation
@@ -901,12 +890,10 @@ algorithm
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1, opd2}, UNARY_CALL("atan"), result);
       ops = operation::ops;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // CALL, asin
-    case (DAE.CALL(path=Absyn.IDENT("asin"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
-    equation
+    case (DAE.CALL(path=Absyn.IDENT("asin"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs)) equation
       opd1::rest = opds;
       // tmp = operation x^2
       op = DAE.MUL(ty);
@@ -929,12 +916,10 @@ algorithm
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1, opd2}, UNARY_CALL("asin"), result);
       ops = operation::ops;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // CALL, acos
-    case (DAE.CALL(path=Absyn.IDENT("acos"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
-    equation
+    case (DAE.CALL(path=Absyn.IDENT("acos"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs)) equation
       opd1::rest = opds;
       // tmp = operation x^2
       op = DAE.MUL(ty);
@@ -958,8 +943,7 @@ algorithm
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1, opd2}, UNARY_CALL("acos"), result);
       ops = operation::ops;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // CALL, mathFunction
     case (DAE.CALL(path=Absyn.IDENT(ident), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
@@ -971,40 +955,37 @@ algorithm
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1}, UNARY_CALL(ident), result);
       ops = operation::ops;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // CALL, trigMathFunction
     case (DAE.CALL(path=Absyn.IDENT(ident), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
       guard isTrigMathFunction(ident)
     equation
       opd1::rest = opds;
-      (extraVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      (paramVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
       result = OPERAND_VAR(resVar);
-      operation = OPERATION({opd1,OPERAND_VAR(extraVar)}, UNARY_CALL(ident), result);
+      operation = OPERATION({opd1,OPERAND_VAR(paramVar)}, UNARY_CALL(ident), result);
       ops = operation::ops;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // CALL, start
     case (DAE.CALL(path=Absyn.IDENT("$_start"), expLst={e1 as DAE.CREF(componentRef=cref)}, attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
     equation
       _::opds = opds;
-      startVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+      // Start var
+      paramVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
-      operation = OPERATION({OPERAND_INDEX(startVar.index+(workingArgs.numParameters+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
+      operation = OPERATION({OPERAND_INDEX(paramVar.index+(workingArgs.numParameters+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::opds;
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // Modelica functions
     // CALL
-    case (DAE.CALL(path=path, expLst=expList, attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs))
-    equation
+    case (DAE.CALL(path=path, expLst=expList, attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
       ident = Absyn.pathString(path, "_");
       // check if function exits in workingStatargs funcNames, else append
       if not List.isMemberOnTrue(path, workingArgs.funcNames, Absyn.pathEqual) then
@@ -1017,23 +998,22 @@ algorithm
       (firstArg, opds, ops, workingArgs) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
       //print("collectOperationsForFuncArgs opds : " +  printOperandListStr(opds) +"\n");
 
-      // Get number of result vars
-      numRes = numResults(ty);
-      if debug then
-        print("numRes = " + intString(numRes) + ".\n");
-        print("Type   = " + Types.printTypeStr(ty) + ".\n");
-      end if;
-
       (results, tmpIndex) = createOperandVarLst(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
       result = List.first(results);
       opds = listAppend(results, opds);
       //print("collectOperationsForFuncArgs opds : " +  printOperandStr(result) +"\n");
-      operation = OPERATION({firstArg, OPERAND_INDEX(listLength(expList)), OPERAND_INDEX(numRes)}, MODELICA_CALL(ident), result);
+
+      // Get number of result vars
+      tmpIndex = numResults(ty);
+      if debug then
+        print("numRes = " + intString(tmpIndex) + ".\n");
+        print("Type   = " + Types.printTypeStr(ty) + ".\n");
+      end if;
+      operation = OPERATION({firstArg, OPERAND_INDEX(listLength(expList)), OPERAND_INDEX(tmpIndex)}, MODELICA_CALL(ident), result);
       //print("collectOperationsForFuncArgs operation : " +  printOperationStr(operation) +"\n");
       ops = operation::ops;
-    then
-      (inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
 
     // UNARY, minus
     case (DAE.UNARY(exp=e1, operator=DAE.UMINUS()), (opds, ops, workingArgs)) equation
@@ -1043,16 +1023,14 @@ algorithm
       result = OPERAND_VAR(resVar);
       operation = OPERATION({opd1}, UNARY_NEG(), result);
       ops = operation::ops;
-    then
-      (inExp, (result::rest, ops, workingArgs));
+    then (inExp, (result::rest, ops, workingArgs));
 
     // debug
     case (_, _) guard debug
     equation
       print("Dump not handled exp : " + ExpressionDump.printExpStr(inExp) + "\n");
       print(ExpressionDump.dumpExpStr(inExp, 0) + "\n");
-    then
-      (inExp, inTpl);
+    then (inExp, inTpl);
 
     else
       (inExp, inTpl);
@@ -1061,8 +1039,8 @@ algorithm
 end collectOperation;
 
 protected function numResults
-  "Todo: Is there a corresponding function in Frontend oder Backend?
-   Todo> Implement the missing cases.
+  "Todo: Is there an existing function in Frontend oder Backend?
+   Todo: Implement the missing cases.
   Returns the number of result variables for DAE.CALL"
   input DAE.Type inType;
   output Integer numRes = 0;
@@ -1097,7 +1075,7 @@ algorithm
       list<Operand> opds;
       DAE.Exp exp;
 
-	  // ADD
+    // ADD
     case DAE.ADD(ty) equation
       (resVar, outIndex) = createSimTmpVar(inIndex, ty);
       result = OPERAND_VAR(resVar);
