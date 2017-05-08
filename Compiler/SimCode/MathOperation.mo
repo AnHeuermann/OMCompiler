@@ -212,6 +212,8 @@ algorithm
     outOperationData := tmpOpData::opDataFuncs;
   else
     outOperationData := {};
+    Error.addMessage(Error.INTERNAL_ERROR, {"function createOperatonData failed."});
+    fail();
   end try;
 end createOperationData;
 
@@ -352,6 +354,7 @@ protected
   list<Operation> operations, tmpOps;
   Integer maxTmpIndex = inWorkingArgs.numVariables;
   list<DAE.Statement> statements;
+  constant Boolean debug = false;
 algorithm
   try
     operations := {};
@@ -514,14 +517,20 @@ algorithm
 
         else
           equation
-            print("Warning not handled eqn: " + SimCodeUtil.simEqSystemString(eq) + "\n");
+            if debug then
+              print("Warning not handled eqn: " + SimCodeUtil.simEqSystemString(eq) + "\n");
+            else
+              fail();
+            end if;
           then ();
+
       end matchcontinue;
       maxTmpIndex := intMax(maxTmpIndex, workingArgs.tmpIndex);
     end for;
     operations := listReverse(operations);
     outOperationData := OPERATIONDATA(operations, maxTmpIndex, {}, {},"");
   else
+    Error.addInternalError("createModelInfo failed", sourceInfo());
     fail();
   end try;
 end createOperationEqns;
