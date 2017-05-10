@@ -698,7 +698,7 @@ algorithm
       SimCode.HashTableCrefToSimVar crefToSimVarHT;
       SimCodeVar.SimVar resVar, timeVar, paramVar;
       list<Operand> opds, opdList, rest, results;
-      list<Operation> ops;
+      list<Operation> ops, tmpOps;
       Operation operation;
       Operand result, firstArg, opd1, opd2, opd3;
       DAE.Exp e1, e2, e3;
@@ -848,6 +848,8 @@ algorithm
       opd3::opd2::opd1::rest = opds;
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, Expression.typeof(e2));
       workingArgs.tmpIndex = tmpIndex;
+      ({opd1,opd2,opd3}, tmpOps, tmpIndex) = createTmpLogForVals({opd1,opd2,opd3}, tmpIndex);
+      ops = listAppend(tmpOps, ops);
       operation = OPERATION({opd1,opd2,opd3}, checkRelation(e1), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::rest;
@@ -1214,6 +1216,34 @@ algorithm
   operands := listReverse(operands);
 end createOperandVarLst;
 
+protected function createTmpLogForVals
+  "Creates a list of operands for the given DAE.type"
+  input list<Operand> inOpds;
+  input Integer inIndex;
+  output list<Operand> operands = {};
+  output list<Operation> extraOps = {};
+  output Integer nextIndex = inIndex;
+protected
+  SimCodeVar.SimVar simVar;
+  DAE.Exp e;
+  DAE.ComponentRef cref;
+algorithm
+  for opd in inOpds loop
+    _ := match(opd)
+      case (OPERAND_CONST(const=e)) equation
+        cref = ComponentReference.makeCrefIdent("$tmpOpVar"+"_"+intString(nextIndex), Expression.typeof(e), {});
+	      simVar = SimCodeUtil.makeTmpRealSimCodeVar(cref, BackendDAE.TMP_SIMVAR(), nextIndex);
+	      extraOps = OPERATION({opd}, ASSIGN_PASSIVE(), OPERAND_VAR(simVar))::extraOps;
+	      operands = OPERAND_VAR(simVar)::operands;
+	      nextIndex = nextIndex + 1;
+	    then ();
+      else equation
+        operands = opd::operands;
+      then ();
+    end match;
+  end for;
+  operands := listReverse(operands);
+end createTmpLogForVals;
 
 protected function checkOperand
   input list<Operand> inOpds;
