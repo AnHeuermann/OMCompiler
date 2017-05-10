@@ -392,7 +392,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       //dasslData->adolc_num_params = stats[NUM_PARAM];
       //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
       //write_ascii_trace(filename2, 0);
-      dasslData->residualFunction = functionODE_residualADOLC;
+      //dasslData->residualFunction = functionODE_residualADOLC;
       dasslData->jacobianFunction =  JacobianADOLCSparse;
       if(measure_time_flag)
       {
