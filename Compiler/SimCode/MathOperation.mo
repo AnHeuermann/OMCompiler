@@ -835,6 +835,14 @@ algorithm
       ops = operation::ops;
     then (inExp, (result::rest, ops, workingArgs));
 
+    // LBINARY
+    case (DAE.LBINARY(operator=op), (opds, ops, workingArgs)) equation
+      opd2::opd1::rest = opds;
+      (operation, result, tmpIndex) = createLBinaryOperation(op, {opd1,opd2}, workingArgs.tmpIndex);
+      workingArgs.tmpIndex = tmpIndex;
+      ops = operation::ops;
+    then (inExp, (result::rest, ops, workingArgs));
+
     // IFEXP
     case (DAE.IFEXP(expCond=e1, expThen=e2, expElse=e3), (opds, ops, workingArgs)) equation
       opd3::opd2::opd1::rest = opds;
@@ -1149,6 +1157,29 @@ algorithm
   (op, result, outIndex) := createBinaryOperation(newop, {opd2,opd1}, inIndex);
 end createRelationOperation;
 
+protected function createLBinaryOperation
+  input DAE.Operator operator;
+  input list<Operand> inOpds;
+  input Integer inIndex;
+  output Operation op;
+  output Operand result;
+  output Integer outIndex;
+protected
+  Operand opd1, opd2;
+  DAE.Operator newop;
+algorithm
+  opd1::opd2::_ := inOpds;
+  if Expression.operatorEqual(operator,DAE.AND(Expression.typeofOp(operator))) then
+    newop := DAE.MUL(Expression.typeofOp(operator));
+  elseif Expression.operatorEqual(operator,DAE.OR(Expression.typeofOp(operator))) then
+    newop := DAE.ADD(Expression.typeofOp(operator));
+  else
+    Error.addMessage(Error.INTERNAL_ERROR,{"MathOperation.createLBinaryOperation failed for op : " + ExpressionDump.binopSymbol(operator)});
+  end if;
+
+  (op, result, outIndex) := createBinaryOperation(newop, {opd2,opd1}, inIndex);
+end createLBinaryOperation;
+
 protected function createSimTmpVar
  input Integer inIndex;
  input DAE.Type inType;
@@ -1233,6 +1264,12 @@ algorithm
     then COND_ASSIGN();
 
     case DAE.RELATION(operator=DAE.LESS(_))
+    then COND_ASSIGN();
+
+    case DAE.LBINARY(operator=DAE.AND(_))
+    then COND_ASSIGN();
+
+    case DAE.LBINARY(operator=DAE.OR(_))
     then COND_ASSIGN();
 
  end match;
