@@ -1545,7 +1545,7 @@ algorithm
     then "cond_eq_assign";
 
     case EXT_DIFF_V2()
-    then "ext_diff_v2";
+    then "ext_diff_v";
   end match;
 end printOperatorStr;
 
