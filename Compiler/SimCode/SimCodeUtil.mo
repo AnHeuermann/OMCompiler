@@ -568,6 +568,10 @@ algorithm
     execStat("simCode: created linear, non-linear and system jacobian parts");
 
     // map index also odeEquations and algebraicEquations
+
+    // TODO: fix this ugly hack, allEquation and odeEquation are different system
+    // what is really annoying!
+    allEquations := setAdolcIndexSysts(allEquations);
     systemIndexMap := List.fold(allEquations, getSystemIndexMap, arrayCreate(uniqueEqIndex, -1));
     odeEquations := List.mapList1_1(odeEquations, setSystemIndexMap, systemIndexMap);
     algebraicEquations := List.mapList1_1(algebraicEquations, setSystemIndexMap, systemIndexMap);
@@ -605,6 +609,7 @@ algorithm
     // create model operation data for adolc
     if  Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then
       tmpSimVars := modelInfo.vars;
+      odeEquations := setAdolcIndexSystList(odeEquations);
       modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations),
                                                               crefToSimVarHT, modelInfo.varInfo, filenamePrefix,
                                                               funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars);
@@ -1216,7 +1221,6 @@ algorithm
         system = SimCode.SES_NONLINEAR(nlSyst, optNlSyst, eqAttr);
         modelInfo.nonLinearSystems = system::modelInfo.nonLinearSystems;
       then system;
-
       // linear case
       case SimCode.SES_LINEAR(lSystem=linearSyst as SimCode.LINEARSYSTEM(), alternativeTearing=optLinearSyst, eqAttr=eqAttr) equation
 
@@ -1238,6 +1242,57 @@ algorithm
   end for;
   eqns := listReverse(resEqns);
 end addAlgebraicLoopsModelInfo;
+
+protected function setAdolcIndexSystList "
+  updates Adolc index of strong components systems"
+  input list<list<SimCode.SimEqSystem>> inEqns;
+  input Integer inAdolcIndex = 0;
+  output list<list<SimCode.SimEqSystem>> outEqns = {};
+protected
+  SimCode.SimEqSystem syst;
+  list<SimCode.SimEqSystem> systList;
+  Integer adolcIndex = inAdolcIndex;
+algorithm
+  for eqs in inEqns loop
+    (systList,adolcIndex) := setAdolcIndexSysts(eqs, adolcIndex);
+		outEqns := systList::outEqns;
+  end for;
+  outEqns := listReverse(outEqns);
+end setAdolcIndexSystList;
+
+protected function setAdolcIndexSysts "
+  updates Adolc index of strong components systems"
+  input list<SimCode.SimEqSystem> inEqns;
+  input Integer inAdolcIndex = 0;
+  output list<SimCode.SimEqSystem> outEqns = {};
+  output Integer outAdolcIndex = inAdolcIndex;
+protected
+  SimCode.SimEqSystem syst;
+algorithm
+  for eq in inEqns loop
+     syst := match(eq)
+      local
+        Integer index, sysIndex;
+        Option<SimCode.JacobianMatrix> optSymJac;
+        Boolean partOfMixed;
+        list<SimCodeVar.SimVar> vars;
+        list<DAE.Exp> beqs;
+        list<tuple<Integer, Integer, SimCode.SimEqSystem>> simJac;
+        list<DAE.ElementSource> sources;
+        list<SimCode.SimEqSystem> eqs;
+
+      // no dynamic tearing
+      case (SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index, partOfMixed, vars, beqs, simJac, eqs, optSymJac, sources, sysIndex, _), NONE()))
+      then SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index, partOfMixed, vars, beqs, simJac, eqs, optSymJac, sources, sysIndex, outAdolcIndex), NONE());
+
+      else
+      then eq;
+    end match;
+    outEqns := syst::outEqns;
+  end for;
+  outAdolcIndex := outAdolcIndex+1;
+  outEqns := listReverse(outEqns);
+end setAdolcIndexSysts;
 
 protected function updateNonLinearSyst
 "Helper function of addAlgebraicLoopsModelInfo
@@ -1275,7 +1330,6 @@ algorithm
   (eqs, modelInfo, tmpSymJacs) := addAlgebraicLoopsModelInfo(inSyst.eqs, modelInfo);
   inSyst.eqs := eqs;
   allSymJacs := listAppend(tmpSymJacs, allSymJacs);
-
   if debug then
     print("Update nonlinear system " + intString(inSyst.indexNonLinearSystem) +
           " collected Jacobians: " + intString(listLength(allSymJacs)) + "\n");
@@ -3406,7 +3460,7 @@ algorithm
         simJac = List.sort(simJac,simJacCSRToCSC);
       end if;
 
-    then ({SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(iuniqueEqIndex, mixedEvent, false, simVars, beqs, simJac, {}, NONE(), sources, 0, inVars.numberOfVars, partOfJac), NONE(), BackendDAE.EQ_ATTR_DEFAULT_UNKNOWN)}, iuniqueEqIndex+1, itempvars);
+    then ({SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(iuniqueEqIndex, mixedEvent, false, simVars, beqs, simJac, {}, NONE(), sources, 0, inVars.numberOfVars, partOfJac, -1), NONE(), BackendDAE.EQ_ATTR_DEFAULT_UNKNOWN)}, iuniqueEqIndex+1, itempvars);
 
     // Time varying nonlinear jacobian. Non-linear system of equations.
     case (_, BackendDAE.JAC_GENERIC()) equation
@@ -3678,7 +3732,7 @@ algorithm
 
        (jacobianMatrix, uniqueEqIndex, tempvars) = createSymbolicSimulationJacobian(inJacobian, uniqueEqIndex, tempvars);
        partOfJac = BackendDAEUtil.isJacobianDAE(ishared);
-       lSystem = SimCode.LINEARSYSTEM(uniqueEqIndex, false, true, simVars, {}, {}, simequations, jacobianMatrix, {}, 0, listLength(tvars)+nInnerVars+listLength(tempvars)-listLength(itempvars), partOfJac);
+       lSystem = SimCode.LINEARSYSTEM(uniqueEqIndex, false, true, simVars, {}, {}, simequations, jacobianMatrix, {}, 0, listLength(tvars)+nInnerVars+listLength(tempvars)-listLength(itempvars), partOfJac, -1);
        tempvars2 = tempvars;
 
        // Do if dynamic tearing is activated
@@ -3699,7 +3753,7 @@ algorithm
          simequations = listAppend(simequations, resEqs);
 
          (jacobianMatrix, uniqueEqIndex, tempvars2) = createSymbolicSimulationJacobian(inJacobian, uniqueEqIndex, tempvars2);
-         alternativeTearingL = SOME(SimCode.LINEARSYSTEM(uniqueEqIndex, false, true, simVars, {}, {}, simequations, jacobianMatrix, {}, 0, listLength(tvars)+nInnerVars+listLength(tempvars2)-listLength(tempvars), partOfJac));
+         alternativeTearingL = SOME(SimCode.LINEARSYSTEM(uniqueEqIndex, false, true, simVars, {}, {}, simequations, jacobianMatrix, {}, 0, listLength(tvars)+nInnerVars+listLength(tempvars2)-listLength(tempvars)), partOfJac, -1);
 
        else
          alternativeTearingL = NONE();
@@ -8419,7 +8473,7 @@ algorithm
   str := matchcontinue(eqSysIn)
     local
       Boolean partMixed,lin,initCall,torn;
-      Integer idx,idxLS,idxNLS,idx2,idxLS2,idxNLS2,idxMS;
+      Integer idx,idxLS,idxNLS,idx2,idxLS2,idxNLS2,idxMS,adolcIndex;
       String s,s1,s2,s3,s4,s5,s6;
       list<String> sLst;
       DAE.Exp exp,right,lhs,iterator,startIt,endIt;
@@ -8475,9 +8529,9 @@ algorithm
     then s;
 
     // no dynamic tearing
-    case(SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index=idx, indexLinearSystem=idxLS, vars=vars, beqs=beqs, residual=residual, jacobianMatrix=jac), NONE()))
+    case(SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index=idx, indexLinearSystem=idxLS, vars=vars, beqs=beqs, residual=residual, jacobianMatrix=jac,adolcIndex=adolcIndex), NONE()))
       equation
-        s = intString(idx) +": "+ " (LINEAR) index:"+intString(idxLS)+" jacobian: "+boolString(Util.isSome(jac))+"\n";
+        s = intString(idx) +": "+ " (LINEAR) index:"+intString(idxLS)+ " adI:" + intString(adolcIndex) + " jacobian: "+boolString(Util.isSome(jac))+"\n";
         s = s+"\tvariables:\n"+stringDelimitList(List.map(vars,simVarString),"\n");
         s = s+"\n\tb-vector:\n"+stringDelimitList(List.map(beqs,ExpressionDump.printExpStr),"\n");
         s = s+ "\t";

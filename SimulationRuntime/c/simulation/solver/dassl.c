@@ -33,6 +33,7 @@
 
 #include <adolc/adolc.h>
 #include <adolc/tapedoc/asciitapes.h>
+#include "simulation/solver/adolc_linear_solver.h"
 
 #include "openmodelica.h"
 #include "openmodelica_func.h"
@@ -129,6 +130,24 @@ static int function_ZeroCrossingsDASSL(int *neqm, double *t, double *y, double *
         int *ng, double *gout, double *rpar, int* ipar);
 /* function for calculating state values on residual form */
 static int functionODE_residualADOLC(double *t, double *x, double *xprime, double *cj, double *delta, int *ires, double *rpar, int* ipar);
+
+
+void initialize_linearSystems(DATA *data)
+{
+	LINEAR_SYSTEM_DATA *lsData = data->simulationInfo->linearSystemData;
+	int i;
+	unsigned int outIdx;
+	for(i=0; i <data->modelData->nLinearSystems; i++)
+	{
+		if (lsData[i].adolcIndex>=0){
+		  outIdx = alloc_adolc_lin_sol(lsData[i].nnz, lsData[i].size, lsData[i].size);
+		  if (outIdx != lsData[i].adolcIndex){
+			  errorStreamPrint(LOG_STDOUT, 0, "ADOLC Linear System Index does not match! %u != %ld", outIdx, lsData[i].adolcIndex);
+		  }
+		  infoStreamPrint(LOG_STDOUT, 0, "Adolc linear system outIndex %u", outIdx);
+		}
+	}
+}
 
 int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo, DASSL_DATA *dasslData)
 {
@@ -358,15 +377,18 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       }
       dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal)*sizeof(double));
-      memcpy(dasslData->adolcParam +1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
+      memcpy(dasslData->adolcParam+1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
+
+      // allocate memory for linear systems
+      initialize_linearSystems(data);
 
       sprintf(filename, "%s_aat.txt", data->modelData->modelFilePrefix);
-      //sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
+      sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
       read_ascii_trace(filename, 0);
       //tapestats(0,stats);
       //dasslData->adolc_num_params = stats[NUM_PARAM];
       //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
-      //write_ascii_trace(filename2, 0);
+      write_ascii_trace(filename2, 0);
       //dasslData->residualFunction = functionODE_residualADOLC;
       dasslData->jacobianFunction =  JacobianADOLC;
       if(measure_time_flag)
@@ -384,6 +406,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal)*sizeof(double));
       memcpy(dasslData->adolcParam +1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
+      initialize_linearSystems(data);
 
       sprintf(filename, "%s_aat.txt", data->modelData->modelFilePrefix);
       //sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);

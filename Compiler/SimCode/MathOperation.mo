@@ -106,8 +106,8 @@ public uniontype MathOperator
   end COND_ASSIGN;
   record COND_EQ_ASSIGN
   end COND_EQ_ASSIGN;
-  record EXT_DIFF_V2
-  end EXT_DIFF_V2;
+  record EXT_DIFF_V
+  end EXT_DIFF_V;
 end MathOperator;
 
 public uniontype Operand
@@ -435,8 +435,8 @@ algorithm
           operations = listAppend(tmpOps, operations); 
         then ();
 
-        case SimCode.SES_LINEAR(lSystem=SimCode.LINEARSYSTEM(vars=vars, beqs=expLst, simJac=simJac, jacobianMatrix = NONE())) algorithm
-
+        // SES_LINEAR
+        case SimCode.SES_LINEAR(lSystem=SimCode.LINEARSYSTEM(vars=vars, beqs=expLst, simJac=simJac, jacobianMatrix=NONE(), adolcIndex=adolcIndex)) algorithm
           // create location for b
           nb := listLength(expLst);
           indexB := workingArgs.tmpIndex;
@@ -495,12 +495,12 @@ algorithm
 
           // create operation for ext diff call
           i := listLength(intOpds);
-          intOpds := OPERAND_INDEX(0)::OPERAND_INDEX(i)::intOpds;
+          intOpds := OPERAND_INDEX(adolcIndex)::OPERAND_INDEX(i)::intOpds;
           intOpds := listAppend(intOpds, {OPERAND_INDEX(i),OPERAND_INDEX(2),OPERAND_INDEX(1),OPERAND_INDEX(nnz),
                                OPERAND_INDEX(indexA), OPERAND_INDEX(nb), OPERAND_INDEX(indexB),
                                OPERAND_INDEX(nx), OPERAND_INDEX(indexX), OPERAND_INDEX(2)});
           result := OPERAND_INDEX(1);
-          op := OPERATION(intOpds, EXT_DIFF_V2(), result);
+          op := OPERATION(intOpds, EXT_DIFF_V(), result);
           operations := op::operations;
 
           // assign x = tmpVars

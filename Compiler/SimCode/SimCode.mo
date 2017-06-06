@@ -492,6 +492,7 @@ uniontype LinearSystem
     Integer indexLinearSystem;
     Integer nUnknowns "Number of variables that are solved in this system. Needed because 'crefs' only contains the iteration variables.";
     Boolean partOfJac "if TRUE then this system is part of a jacobian matrix";
+    Integer adolcIndex;
   end LINEARSYSTEM;
 end LinearSystem;
 
