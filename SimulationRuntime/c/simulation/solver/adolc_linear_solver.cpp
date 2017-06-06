@@ -222,7 +222,7 @@ int LinearSolverEdf::fov_reverse(int iArrLen, int* iArr, int nout, int nin, int 
   return 0;
 }
 
-#include "adolc_linear_solver.h"
+#include "simulation/solver/adolc_linear_solver.h"
 
 unsigned int alloc_adolc_lin_sol(int nnz, int nb, int nx) {
     int insz[2], outsz[1];
