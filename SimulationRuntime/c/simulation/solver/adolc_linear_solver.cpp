@@ -32,6 +32,7 @@
  */
 
 #include <string.h>
+#include <vector>
 #include <adolc/edfclasses.h>
 
 
@@ -53,7 +54,7 @@ public:
     virtual int fov_reverse(int iArrLen, int* iArr, int nout, int nin, int *outsz, int dir, double ***Up, int *insz, double ***Zp, double **x, double **y, void* ctx);
 };
 
-static LinearSolverEdf linSolEdf;
+static std::vector<LinearSolverEdf> linSolEdfVec;
 
 int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
 
@@ -219,4 +220,16 @@ int LinearSolverEdf::fos_reverse(int iArrLen, int* iArr, int nout, int nin, int 
 }
 int LinearSolverEdf::fov_reverse(int iArrLen, int* iArr, int nout, int nin, int *outsz, int dir, double ***Up, int *insz, double ***Zp, double **x, double **y, void* ctx){
   return 0;
+}
+
+#include "adolc_linear_solver.h"
+
+unsigned int alloc_adolc_lin_sol(int nnz, int nb, int nx) {
+    int insz[2], outsz[1];
+    insz[0] = nnz;
+    insz[1] = nb;
+    outsz[0] = nx;
+    linSolEdfVec.emplace_back();
+    linSolEdfVec.back().allocate_mem(2,1,insz,outsz);
+    return linSolEdfVec.back().get_index();
 }
