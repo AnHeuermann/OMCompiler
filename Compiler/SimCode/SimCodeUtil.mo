@@ -292,6 +292,7 @@ protected
 
   list<MathOperation.OperationData> modelOperationData;
   DAE.FunctionTree funcTree;
+  Integer adolcIndex;
 algorithm
   try
     execStat("Backend phase and start with SimCode phase");
@@ -571,7 +572,8 @@ algorithm
 
     // TODO: fix this ugly hack, allEquation and odeEquation are different system
     // what is really annoying!
-    allEquations := setAdolcIndexSysts(allEquations);
+    (allEquations, adolcIndex) := setAdolcIndexLinSysts(allEquations);
+    allEquations := setAdolcIndexNonLinSysts(allEquations, adolcIndex);
     systemIndexMap := List.fold(allEquations, getSystemIndexMap, arrayCreate(uniqueEqIndex, -1));
     odeEquations := List.mapList1_1(odeEquations, setSystemIndexMap, systemIndexMap);
     algebraicEquations := List.mapList1_1(algebraicEquations, setSystemIndexMap, systemIndexMap);
@@ -609,7 +611,8 @@ algorithm
     // create model operation data for adolc
     if  Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then
       tmpSimVars := modelInfo.vars;
-      odeEquations := setAdolcIndexSystList(odeEquations);
+      (odeEquations,adolcIndex) := setAdolcIndexSystList(odeEquations);
+      odeEquations := setAdolcIndexSystList(odeEquations, adolcIndex, false);
       modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations),
                                                               crefToSimVarHT, modelInfo.varInfo, filenamePrefix,
                                                               funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars);
@@ -1247,20 +1250,25 @@ protected function setAdolcIndexSystList "
   updates Adolc index of strong components systems"
   input list<list<SimCode.SimEqSystem>> inEqns;
   input Integer inAdolcIndex = 0;
+  input Boolean systLinear = true; 
   output list<list<SimCode.SimEqSystem>> outEqns = {};
+  output Integer outAdolcIndex = inAdolcIndex;
 protected
   SimCode.SimEqSystem syst;
   list<SimCode.SimEqSystem> systList;
-  Integer adolcIndex = inAdolcIndex;
 algorithm
   for eqs in inEqns loop
-    (systList,adolcIndex) := setAdolcIndexSysts(eqs, adolcIndex);
+    if systLinear then
+      (systList,outAdolcIndex) := setAdolcIndexLinSysts(eqs, outAdolcIndex);
+    else
+      (systList,outAdolcIndex) := setAdolcIndexNonLinSysts(eqs, outAdolcIndex);
+    end if;
 		outEqns := systList::outEqns;
   end for;
   outEqns := listReverse(outEqns);
 end setAdolcIndexSystList;
 
-protected function setAdolcIndexSysts "
+protected function setAdolcIndexLinSysts "
   updates Adolc index of strong components systems"
   input list<SimCode.SimEqSystem> inEqns;
   input Integer inAdolcIndex = 0;
@@ -1292,7 +1300,39 @@ algorithm
   end for;
   outAdolcIndex := outAdolcIndex+1;
   outEqns := listReverse(outEqns);
-end setAdolcIndexSysts;
+end setAdolcIndexLinSysts;
+
+protected function setAdolcIndexNonLinSysts "
+  updates Adolc index of strong components systems"
+  input list<SimCode.SimEqSystem> inEqns;
+  input Integer inAdolcIndex = 0;
+  output list<SimCode.SimEqSystem> outEqns = {};
+  output Integer outAdolcIndex = inAdolcIndex;
+protected
+  SimCode.SimEqSystem syst;
+algorithm
+  for eq in inEqns loop
+     syst := match(eq)
+      local
+        Integer index, sysIndex;
+        list<SimCode.SimEqSystem> eqs;
+        list<DAE.ComponentRef> crefs;
+        Option<SimCode.JacobianMatrix> optSymJac;
+        Boolean homotopySupport;
+        Boolean mixedSystem;
+
+      // no dynamic tearing
+      case (SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, sysIndex, optSymJac, homotopySupport, mixedSystem, _), NONE()))
+      then SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, sysIndex, optSymJac, homotopySupport, mixedSystem, outAdolcIndex), NONE());
+
+      else
+      then eq;
+    end match;
+    outEqns := syst::outEqns;
+  end for;
+  outAdolcIndex := outAdolcIndex+1;
+  outEqns := listReverse(outEqns);
+end setAdolcIndexNonLinSysts;
 
 protected function updateNonLinearSyst
 "Helper function of addAlgebraicLoopsModelInfo
@@ -2369,7 +2409,7 @@ algorithm
               (resEqs, uniqueEqIndex, tempvars) := createNonlinearResidualEquations({eqn}, iuniqueEqIndex, itempvars, shared.functionTree);
               cr := if BackendVariable.isStateVar(v) then ComponentReference.crefPrefixDer(cr) else cr;
               (_, homotopySupport) := BackendEquation.traverseExpsOfEquation(eqn, BackendDAEUtil.containsHomotopyCall, false);
-              eqSystlst := {SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, {cr}, 0, 1, NONE(), homotopySupport, false, false), NONE(), eqAttr)};
+              eqSystlst := {SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, {cr}, 0, 1, NONE(), homotopySupport, false, false, -1), NONE(), eqAttr)};
               uniqueEqIndex := uniqueEqIndex + 1;
             else
               b := false;
@@ -2382,7 +2422,7 @@ algorithm
             (resEqs, uniqueEqIndex, tempvars) := createNonlinearResidualEquations({eqn}, iuniqueEqIndex, itempvars, shared.functionTree);
             cr := if BackendVariable.isStateVar(v) then ComponentReference.crefPrefixDer(cr) else cr;
             (_, homotopySupport) := BackendEquation.traverseExpsOfEquation(eqn, BackendDAEUtil.containsHomotopyCall, false);
-            eqSystlst := {SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, {cr}, 0, 1, NONE(), homotopySupport, false, false), NONE(), eqAttr)};
+            eqSystlst := {SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, {cr}, 0, 1, NONE(), homotopySupport, false, false, -1), NONE(), eqAttr)};
             uniqueEqIndex := uniqueEqIndex+1;
           end if;
         end if;
@@ -3474,7 +3514,7 @@ algorithm
       // create symbolic jacobian for simulation
       (jacobianMatrix, uniqueEqIndex, tempvars) = createSymbolicSimulationJacobian(inJacobian, uniqueEqIndex, tempvars);
       (_, homotopySupport) = BackendEquation.traverseExpsOfEquationList(eqn_lst, BackendDAEUtil.containsHomotopyCall, false);
-    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, 0, inVars.numberOfVars+listLength(tempvars)-listLength(itempvars), jacobianMatrix, homotopySupport, mixedSystem, false), NONE(), BackendDAE.EQ_ATTR_DEFAULT_UNKNOWN)}, uniqueEqIndex+1, tempvars);
+    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, 0, inVars.numberOfVars+listLength(tempvars)-listLength(itempvars), jacobianMatrix, homotopySupport, mixedSystem, false, -1), NONE(), BackendDAE.EQ_ATTR_DEFAULT_UNKNOWN)}, uniqueEqIndex+1, tempvars);
 
     // No analytic jacobian available. Generate non-linear system.
     case (_, _) equation
@@ -3485,7 +3525,7 @@ algorithm
       crefs = BackendVariable.getAllCrefFromVariables(inVars);
       (resEqs, uniqueEqIndex, tempvars) = createNonlinearResidualEquations(eqn_lst, iuniqueEqIndex, itempvars, inFuncs);
       (_, homotopySupport) = BackendEquation.traverseExpsOfEquationList(eqn_lst, BackendDAEUtil.containsHomotopyCall, false);
-    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, 0, inVars.numberOfVars+listLength(tempvars)-listLength(itempvars), NONE(), homotopySupport, mixedSystem, false), NONE(), BackendDAE.EQ_ATTR_DEFAULT_UNKNOWN)}, uniqueEqIndex+1, tempvars);
+    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, 0, inVars.numberOfVars+listLength(tempvars)-listLength(itempvars), NONE(), homotopySupport, mixedSystem, false, -1), NONE(), BackendDAE.EQ_ATTR_DEFAULT_UNKNOWN)}, uniqueEqIndex+1, tempvars);
 
     // failure
     else equation
@@ -3782,7 +3822,7 @@ algorithm
          (_, homotopySupport) = BackendEquation.traverseExpsOfEquationList(reqns, BackendDAEUtil.containsHomotopyCall, false);
        end if;
 
-       nlSystem = SimCode.NONLINEARSYSTEM(uniqueEqIndex, simequations, tcrs, 0, listLength(tvars)+nInnerVars+listLength(tempvars)-listLength(itempvars), jacobianMatrix, homotopySupport, mixedSystem, true);
+       nlSystem = SimCode.NONLINEARSYSTEM(uniqueEqIndex, simequations, tcrs, 0, listLength(tvars)+nInnerVars+listLength(tempvars)-listLength(itempvars), jacobianMatrix, homotopySupport, mixedSystem, true, -1);
        tempvars2 = tempvars;
 
        // Do if dynamic tearing is activated
@@ -3807,7 +3847,7 @@ algorithm
            (_, homotopySupport) = BackendEquation.traverseExpsOfEquationList(reqns, BackendDAEUtil.containsHomotopyCall, false);
          end if;
 
-         alternativeTearingNl = SOME(SimCode.NONLINEARSYSTEM(uniqueEqIndex, simequations, tcrs, 0, listLength(tvars)+nInnerVars+listLength(tempvars2)-listLength(tempvars), jacobianMatrix, homotopySupport, mixedSystem, true));
+         alternativeTearingNl = SOME(SimCode.NONLINEARSYSTEM(uniqueEqIndex, simequations, tcrs, 0, listLength(tvars)+nInnerVars+listLength(tempvars2)-listLength(tempvars), jacobianMatrix, homotopySupport, mixedSystem, true, -1));
        else
          alternativeTearingNl = NONE();
        end if;
@@ -6253,7 +6293,7 @@ algorithm
       //       considered yet there.
       (resEqs, uniqueEqIndex, tempvars) = createNonlinearResidualEquations({inEquation}, iuniqueEqIndex, itempvars, funcTree);
       (_, homotopySupport) = BackendEquation.traverseExpsOfEquation(inEquation, BackendDAEUtil.containsHomotopyCall, false);
-    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, 0, listLength(inVars)+listLength(tempvars)-listLength(itempvars), NONE(), homotopySupport, false, false), NONE(), eqAttr)}, uniqueEqIndex+1, tempvars);
+    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, 0, listLength(inVars)+listLength(tempvars)-listLength(itempvars), NONE(), homotopySupport, false, false, -1), NONE(), eqAttr)}, uniqueEqIndex+1, tempvars);
 
     // failure
     case (BackendDAE.COMPLEX_EQUATION(left=e1, right=e2), _, _, _) equation
@@ -6754,7 +6794,7 @@ algorithm
       if not listEmpty(solvedVars) then
         result = {SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(iuniqueEqIndex+1,
                       {SimCode.SES_INVERSE_ALGORITHM(iuniqueEqIndex, algStatements, knownOutputCrefs, true, eqAttr)},
-                   solvedVars, 0, listLength(vars), NONE(), false, false, false), NONE(), eqAttr)};
+                   solvedVars, 0, listLength(vars), NONE(), false, false, false, -1), NONE(), eqAttr)};
         ouniqueEqIndex = iuniqueEqIndex+2;
       else
         result = {SimCode.SES_INVERSE_ALGORITHM(iuniqueEqIndex, algStatements, knownOutputCrefs, false, eqAttr)};

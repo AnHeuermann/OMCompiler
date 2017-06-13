@@ -508,6 +508,7 @@ uniontype NonlinearSystem
     Boolean homotopySupport;
     Boolean mixedSystem;
     Boolean tornSystem;
+    Integer adolcIndex;
   end NONLINEARSYSTEM;
 end NonlinearSystem;
 
