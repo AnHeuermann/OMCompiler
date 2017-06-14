@@ -146,6 +146,7 @@ protected uniontype WorkingStateArgs
   record WORKINGSTATEARGS
     SimCode.HashTableCrefToSimVar crefToSimVarHT;
     list<Absyn.Path> funcNames;
+    list<SimCode.NonlinearSystem> nlsSystems;
     Integer tmpIndex;
     Integer numVariables;
     Integer numParameters;
@@ -168,12 +169,12 @@ protected
   Integer numVariables; 
   list<Integer> tmpLst;
   OperationData tmpOpData;
-  list<OperationData> opDataFuncs;
+  list<OperationData> opDataFuncs, opDataNLS;
   constant Boolean debug = false;
 algorithm
   try
     numVariables := 2*varInfo.numStateVars + varInfo.numAlgVars;
-    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, numVariables, numVariables, varInfo.numParams);
+    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, numVariables, numVariables, varInfo.numParams);
 
     if debug then
       print("# Equations: " + intString(listLength(inEquations)) + ".\n");
@@ -192,8 +193,13 @@ algorithm
       Util.stringDelimitListPrintBuf(list(Absyn.pathString(str) for str in workingArgs.funcNames) , " ");
     end if;
 
+    // create needed nls systems
+    (opDataNLS, workingArgs) := createOperationDataNLS(workingArgs.nlsSystems, workingArgs);
+
     // create needed functions
     opDataFuncs := createOperationDataFuncs(workingArgs.funcNames, functionTree);
+    
+    opDataFuncs := listAppend(opDataNLS, opDataFuncs);
 
     tmpLst := list(var.index for var in independents);
     tmpOpData.independents := tmpLst;
@@ -239,7 +245,7 @@ protected
 algorithm
   // get function for funcName
   // create OperationData for single func
-  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, 0, 0, 0);
+  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, {}, 0, 0, 0);
   while not listEmpty(funcList) loop
     for funcName in funcList loop
 
@@ -275,7 +281,7 @@ algorithm
       localHT := List.fold(protectedSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
       numVars := listLength(inputSimVars) + listLength(outputSimVars) + listLength(protectedSimVars);
 
-      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, numVars, numVars, 0);
+      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, {}, numVars, numVars, 0);
 
       (optData, workingArgs) := createOperationsForFunction(bodyStmts, workingArgs, allFuncList);
 
@@ -291,6 +297,46 @@ algorithm
     funcList := workingArgs.funcNames;
   end while;
 end createOperationDataFuncs;
+
+protected function createOperationDataNLS
+  input list<SimCode.NonlinearSystem> nlsSysts;
+  input WorkingStateArgs inWorkingStateArgs;
+  output list<OperationData> outOperationData = {};
+  output WorkingStateArgs outWorkingStateArgs = inWorkingStateArgs;
+protected
+  WorkingStateArgs workingArgs;
+  SimCode.HashTableCrefToSimVar localHT;
+  list<DAE.Exp> crefExps;
+  list<SimCodeVar.SimVar> iterationSimVars;
+
+  Integer numVars;
+  OperationData optData;
+  list<Integer> tmpLst;
+
+  constant Boolean debug = true;
+algorithm
+  // get function for funcName
+  // create OperationData for single func
+
+  for nlsSyst in nlsSysts loop
+
+    if debug then
+      print("Create operation list for nlsSystem index: " + intString(nlsSyst.adolcIndex) + "\n");
+    end if;
+
+    localHT := HashTableCrefSimVar.emptyHashTable();
+
+    // create input variables
+    crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.crefs);
+    iterationSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
+    iterationSimVars := SimCodeUtil.rewriteIndex(iterationSimVars, 0);
+
+    localHT := List.fold(iterationSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
+
+    workingArgs := WORKINGSTATEARGS(localHT, {}, {}, 0, 0, 0);
+
+  end for;
+end createOperationDataNLS;
 
 protected function createSimVarsFromElements
   input list<DAE.Element> elmts; // DAE.VAR
@@ -359,16 +405,23 @@ algorithm
   try
     operations := {};
     for eq in inEquations loop
-      _ := matchcontinue eq
-        local
-          Integer index;
-          DAE.Exp exp;
-          DAE.ComponentRef cref;
-          list<Operation> rest;
-          Operation op;
-          list<Operand> operands;
-          Operand assignOperand, simVarOperand;
-          SimCodeVar.SimVar simVar;
+      () := matchcontinue eq
+      local
+        Integer index, adolcIndex;
+        DAE.Exp exp;
+        list<DAE.Exp> expLst;
+        DAE.ComponentRef cref;
+        list<DAE.ComponentRef> crefs;
+        list<Operation> rest;
+        Operation op;
+        list<Operand> operands;
+        Operand assignOperand, simVarOperand, result;
+        SimCodeVar.SimVar simVar;
+        list<SimCodeVar.SimVar> vars;
+        list<tuple<Integer, Integer, SimCode.SimEqSystem>> simJac;
+        Integer i, nnz, indexB, nb,  indexA, indexX, row, col, nx, adolcIndex;
+        list<Operand> intOpds = {};
+        SimCode.NonlinearSystem nlSystem;
 
         // SIMPLE_ASSIGN
         case SimCode.SES_SIMPLE_ASSIGN(index=index, exp=exp, cref=cref) equation
@@ -403,11 +456,6 @@ algorithm
           print("======================Hit a SES_IFEQUATION\n");
         then ();
 
-        // SES_NONLINEAR
-        case SimCode.SES_NONLINEAR() equation
-          print("======================Hit a SES_NONLINEAR\n");
-        then ();
-
         // SES_MIXED
         case SimCode.SES_MIXED() equation
           print("======================Hit a SES_MIXED\n");
@@ -433,6 +481,17 @@ algorithm
           workingArgs.tmpIndex = workingArgs.numVariables;
           (tmpOps, workingArgs) = createOperationDataStmts(statements, workingArgs);
           operations = listAppend(tmpOps, operations); 
+        then ();
+
+        // SES_NONLINEAR
+        case SimCode.SES_NONLINEAR(nlSystem= nlSystem as SimCode.NONLINEARSYSTEM(adolcIndex=adolcIndex, crefs=crefs)) algorithm
+          print("======================Hit a SES_NONLINEAR with index " + intString(adolcIndex) + "\n");
+
+          intOpds := listAppend({OPERAND_INDEX(adolcIndex),OPERAND_INDEX(listLength(crefs))}, intOpds);
+          result := OPERAND_INDEX(1);
+          op := OPERATION(intOpds, EXT_DIFF_V(), result);
+
+          workingArgs.nlsSystems := nlSystem::workingArgs.nlsSystems;
         then ();
 
         // SES_LINEAR

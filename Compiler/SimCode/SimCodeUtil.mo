@@ -2941,7 +2941,7 @@ algorithm
   end match;
 end createArrayTempVar;
 
-protected function createTempVarsforCrefs
+public function createTempVarsforCrefs
   input list<DAE.Exp> inTmpCrefsLst;
   input list<SimCodeVar.SimVar> itempvars;
   output list<SimCodeVar.SimVar> otempvars;
