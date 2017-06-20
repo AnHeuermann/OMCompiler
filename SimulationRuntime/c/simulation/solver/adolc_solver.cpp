@@ -28,7 +28,7 @@
  *
  */
 
-/*! \file adolc_linear_solver.c
+/*! \file adolc_solver.c
  */
 
 #include <string.h>
@@ -230,9 +230,76 @@ int LinearSolverEdf::fov_reverse(int iArrLen, int* iArr, int nout, int nin, int 
   return 0;
 }
 
-#include "simulation/solver/adolc_linear_solver.h"
+/* =============== */
+/* Non-linear part */
+/* =============== */
+
+class NonLinearSolverEdf : public EDFobject_v2 {
+public:
+    NonLinearSolverEdf();
+    virtual ~NonLinearSolverEdf() {}
+    virtual int function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
+    virtual int zos_forward(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
+    virtual int fos_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, double **xp, int *outsz, double **y, double **yp, void *ctx);
+    virtual int fov_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, int ndir, double ***Xp, int *outsz, double **y, double ***Yp, void* ctx);
+    virtual int fos_reverse(int iArrLen, int* iArr, int nout, int nin, int *outsz, double **up, int *insz, double **zp, double **x, double **y, void *ctx);
+    virtual int fov_reverse(int iArrLen, int* iArr, int nout, int nin, int *outsz, int dir, double ***Up, int *insz, double ***Zp, double **x, double **y, void* ctx);
+};
+
+static std::vector<NonLinearSolverEdf> nonlinSolEdfVec;
+
+
+NonLinearSolverEdf::NonLinearSolverEdf(){
+
+}
+
+int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
+
+
+  return 0;
+}
+
+int NonLinearSolverEdf::zos_forward(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
+
+  return this->function(iArrLen, iArr, nin, nout, insz, x, outsz, y, ctx);
+}
+
+
+int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, double **xp, int *outsz, double **y, double **yp, void *ctx) {
+
+
+  return 0;
+}
+
+
+
+int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, int ndir, double ***Xp, int *outsz, double **y, double ***Yp, void* ctx) {
+
+  return 0;
+}
+
+
+int NonLinearSolverEdf::fos_reverse(int iArrLen, int* iArr, int nout, int nin, int *outsz, double **up, int *insz, double **zp, double **x, double **y, void *ctx){
+  return 0;
+}
+int NonLinearSolverEdf::fov_reverse(int iArrLen, int* iArr, int nout, int nin, int *outsz, int dir, double ***Up, int *insz, double ***Zp, double **x, double **y, void* ctx){
+  return 0;
+}
+
+
+#include "simulation/solver/adolc_solver.h"
 
 unsigned int alloc_adolc_lin_sol(int nnz, int nb, int nx) {
+    int insz[2], outsz[1];
+    insz[0] = nnz;
+    insz[1] = nb;
+    outsz[0] = nx;
+    linSolEdfVec.emplace_back();
+    linSolEdfVec.back().allocate_mem(2,1,insz,outsz);
+    return linSolEdfVec.back().get_index();
+}
+
+unsigned int alloc_adolc_nonlin_sol(int nnz, int nb, int nx) {
     int insz[2], outsz[1];
     insz[0] = nnz;
     insz[1] = nb;

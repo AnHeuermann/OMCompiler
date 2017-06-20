@@ -28,17 +28,19 @@
  *
  */
 
-/*! \file adolc_linear_solver.c
+/*! \file adolc_solver.c
  */
 
-#ifndef ADOLC_LINEAR_SOLVER_H
-#define ADOLC_LINEAR_SOLVER_H
+#ifndef ADOLC_SOLVER_H
+#define ADOLC_SOLVER_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 unsigned int alloc_adolc_lin_sol(int nnz, int nb, int nx);
+
+unsigned int alloc_adolc_nonlin_sol(int nnz, int nb, int nx);
 
 #ifdef __cplusplus
 }

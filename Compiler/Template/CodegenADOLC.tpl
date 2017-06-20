@@ -18,16 +18,16 @@ import ExpressionDumpTpl;
   "Generates ADOL-C ascii trace file"
 ::=
   match simCode
-  case simCode as SIMCODE(modelOperationData=modelOperationData,modelInfo=MODELINFO(varInfo=VARINFO(numParams=numParams))) then
-    let text = (modelOperationData |> opData as OPERATIONDATA(name=name) => textFile(createAdolcTrace(opData,numParams), '<%name%>_aat.txt'))
+  case simCode as SIMCODE(modelOperationData=modelOperationData) then
+    let text = (modelOperationData |> opData as OPERATIONDATA(name=name) => textFile(createAdolcTrace(opData), '<%name%>_aat.txt'))
     <<>>
   end match 
 end generateAdolcAsciiTrace;
 
-template createAdolcTrace(OperationData modelOperationData, Integer numParams)
+template createAdolcTrace(OperationData modelOperationData)
 ::=
   match modelOperationData
-    case operationData as OPERATIONDATA(maxTmpIndex=maxTmpIndex, independents=inds, dependents=deps) then
+    case operationData as OPERATIONDATA(maxTmpIndex=maxTmpIndex, independents=inds, dependents=deps, numParameters=numParameters) then
     let tmpIndex='<%maxTmpIndex%>'
     // states are independent variables
     let assign_ind = ""
@@ -41,7 +41,7 @@ template createAdolcTrace(OperationData modelOperationData, Integer numParams)
     ;separator="\n")
 
     let death_not = '{ op:death_not loc:0 loc:<%maxTmpIndex%> }'
-    let num_real_param = '{ op:set_numparam loc:<%numParams%> }'
+    let num_real_param = '{ op:set_numparam loc:<%numParameters%> }'
     let operations = match modelOperationData
                       case operationData as
                                 OPERATIONDATA(operations=operations) then

@@ -73,7 +73,7 @@ SOLVER_OBJS=$(SOLVER_OBJS_MINIMAL) kinsolSolver$(OBJ_EXT) linearSolverKlu$(OBJ_E
 else
 SOLVER_OBJS=$(SOLVER_OBJS_MINIMAL)
 endif
-SOLVER_OBJS_CPP = adolc_linear_solver$(OBJ_EXT)
+SOLVER_OBJS_CPP = adolc_solver$(OBJ_EXT)
 
 SOLVER_HFILES = dassl.h dae_mode.h delay.h epsilon.h events.h external_input.h fmi_events.h ida_solver.h linearSystem.h mixedSystem.h model_help.h nonlinearSystem.h nonlinearValuesList.h radau.h sym_solver_ssc.h solver_main.h stateset.h
 

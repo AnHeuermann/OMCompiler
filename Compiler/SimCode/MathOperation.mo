@@ -139,6 +139,7 @@ public uniontype OperationData
     list<Integer> independents;
     list<Integer> dependents;
     String name;
+    Integer numParameters;
   end OPERATIONDATA;
 end OperationData;
 
@@ -158,7 +159,8 @@ end WorkingStateArgs;
 public function createOperationData
   input list<SimCode.SimEqSystem> inEquations;
   input SimCode.HashTableCrefToSimVar crefToSimVarHT;
-  input SimCode.VarInfo varInfo;
+  input Integer numVariables;
+  input list<SimCodeVar.SimVar> realParameters; 
   input String modelName;
   input DAE.FunctionTree functionTree;
   input list<SimCodeVar.SimVar> independents;
@@ -166,15 +168,13 @@ public function createOperationData
   output list<OperationData> outOperationData;
 protected
   WorkingStateArgs workingArgs;
-  Integer numVariables; 
   list<Integer> tmpLst;
   OperationData tmpOpData;
   list<OperationData> opDataFuncs, opDataNLS;
   constant Boolean debug = false;
 algorithm
   try
-    numVariables := 2*varInfo.numStateVars + varInfo.numAlgVars;
-    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, numVariables, numVariables, varInfo.numParams);
+    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, numVariables, numVariables, listLength(realParameters));
 
     if debug then
       print("# Equations: " + intString(listLength(inEquations)) + ".\n");
@@ -189,24 +189,27 @@ algorithm
     (tmpOpData, workingArgs) := createOperationEqns(inEquations, workingArgs);
 
     if debug then
-      print("\ncreateOperationData for functions: \n");
+      print("\ncreateOperationData for NLS Systems: \n");
       Util.stringDelimitListPrintBuf(list(Absyn.pathString(str) for str in workingArgs.funcNames) , " ");
     end if;
 
     // create needed nls systems
-    (opDataNLS, workingArgs) := createOperationDataNLS(workingArgs.nlsSystems, workingArgs);
+    (opDataNLS, workingArgs) := createOperationDataNLS(workingArgs.nlsSystems, modelName, realParameters, workingArgs);
+
+    if debug then
+      print("\ncreateOperationData for functions: \n");
+      Util.stringDelimitListPrintBuf(list(Absyn.pathString(str) for str in workingArgs.funcNames) , " ");
+    end if;
 
     // create needed functions
     opDataFuncs := createOperationDataFuncs(workingArgs.funcNames, functionTree);
     
     opDataFuncs := listAppend(opDataNLS, opDataFuncs);
 
-    tmpLst := list(var.index for var in independents);
-    tmpOpData.independents := tmpLst;
-    tmpLst := list(var.index for var in dependents);
-    tmpOpData.dependents := tmpLst;
+    tmpOpData := setInDepAndDepVars(independents, dependents, tmpOpData);
 
     tmpOpData.name := modelName;
+    tmpOpData.numParameters := 1+listLength(realParameters);
 
     if debug then
       print("Created operations for model: " + modelName +
@@ -223,6 +226,15 @@ algorithm
   end try;
 end createOperationData;
 
+protected function setInDepAndDepVars
+  input list<SimCodeVar.SimVar> independents;
+  input list<SimCodeVar.SimVar> dependents;
+  input OperationData inOpData;
+  output OperationData outOpData = inOpData;
+algorithm
+  outOpData.independents := list(var.index for var in independents);
+  outOpData.dependents := list(var.index for var in dependents);
+end setInDepAndDepVars;
 
 protected function createOperationDataFuncs
   input list<Absyn.Path> funcNames;
@@ -291,6 +303,9 @@ algorithm
       optData.dependents := tmpLst;
 
       optData.name := Absyn.pathString(funcName, "_");
+      
+      optData.numParameters := 0;
+      
       outOperationData := optData::outOperationData;
     end for;
     allFuncList := listAppend(workingArgs.funcNames, allFuncList);
@@ -300,6 +315,8 @@ end createOperationDataFuncs;
 
 protected function createOperationDataNLS
   input list<SimCode.NonlinearSystem> nlsSysts;
+  input String modelName;
+  input list<SimCodeVar.SimVar> simVarParams;
   input WorkingStateArgs inWorkingStateArgs;
   output list<OperationData> outOperationData = {};
   output WorkingStateArgs outWorkingStateArgs = inWorkingStateArgs;
@@ -307,7 +324,9 @@ protected
   WorkingStateArgs workingArgs;
   SimCode.HashTableCrefToSimVar localHT;
   list<DAE.Exp> crefExps;
-  list<SimCodeVar.SimVar> iterationSimVars;
+  list<SimCodeVar.SimVar> iterationSimVars, inputSimVars, resSimVars, innerSimVars;
+  
+  list<DAE.ComponentRef> resCrefs;
 
   Integer numVars;
   OperationData optData;
@@ -315,14 +334,28 @@ protected
 
   constant Boolean debug = true;
 algorithm
-  // get function for funcName
-  // create OperationData for single func
-
+  // create OperationData for nls system
   for nlsSyst in nlsSysts loop
 
+    // Torn system
+    //   x   -> inputVars
+    //   y1  -> interation vars
+    //   y2  -> internal vars
+    //   res -> residuals vars
     if debug then
       print("Create operation list for nlsSystem index: " + intString(nlsSyst.adolcIndex) + "\n");
     end if;
+
+    resCrefs := list( ComponentReference.makeCrefIdent("$res" + intString(i), DAE.T_REAL_DEFAULT, {})  for i in 1:listLength(nlsSyst.crefs));
+    // add res cref to residuals-simEqs
+    SimCodeUtil.dumpSimEqSystemLst(nlsSyst.eqs, "\n");
+    nlsSyst.eqs := makeAssignEqFromResidualEqs(nlsSyst.eqs, resCrefs);
+    SimCodeUtil.dumpSimEqSystemLst(nlsSyst.eqs, "\n");
+
+    // create Trace 1
+    //   time, p, x -> parameters
+    //   y1  -> independets
+    //   res -> dependets
 
     localHT := HashTableCrefSimVar.emptyHashTable();
 
@@ -333,10 +366,104 @@ algorithm
 
     localHT := List.fold(iterationSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
-    workingArgs := WORKINGSTATEARGS(localHT, {}, {}, 0, 0, 0);
+    // create inputs variables
+    crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.inputCrefs);
+    inputSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
+    inputSimVars := List.map1(inputSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
+    inputSimVars := SimCodeUtil.rewriteIndex(inputSimVars, listLength(simVarParams)+1);
 
+    localHT := List.fold(simVarParams, SimCodeUtil.addSimVarToHashTable, localHT);
+    localHT := List.fold(inputSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
+      
+    // create residual variables    
+    crefExps := list(Expression.crefToExp(cr) for cr in resCrefs);
+    resSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
+    resSimVars := SimCodeUtil.rewriteIndex(resSimVars, listLength(iterationSimVars));
+    SimCodeUtil.dumpVarLst(resSimVars, "resSimVars");
+    
+    localHT := List.fold(resSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
+
+    //create inner variables
+    crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.internalCrefs);
+    innerSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
+    innerSimVars := SimCodeUtil.rewriteIndex(innerSimVars, listLength(iterationSimVars)+listLength(resSimVars));
+
+    localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
+
+    numVars := listLength(iterationSimVars)+listLength(resSimVars)+listLength(innerSimVars);    
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 1+listLength(simVarParams)+listLength(inputSimVars));
+        
+    // create operation of the equations
+    (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs);
+    // set dep and indep  
+    optData := setInDepAndDepVars(iterationSimVars, resSimVars, optData);
+    optData.numParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
+    // set op data name
+    optData.name := modelName + "nls_" + intString(nlsSyst.adolcIndex) + "_1";
+  
+    outOperationData := optData::outOperationData;    
+
+    // create Trace 2
+    //   time, p, y -> parameters
+    //   x  -> independets
+    //   res -> dependets
+    localHT := HashTableCrefSimVar.emptyHashTable();
+    
+    // x -> indep
+    inputSimVars := List.map1(inputSimVars, SimCodeUtil.setSimVarKind, BackendDAE.VARIABLE());
+    inputSimVars := SimCodeUtil.rewriteIndex(inputSimVars, 0);
+    localHT := List.fold(inputSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
+    
+    // y -> params
+    iterationSimVars := List.map1(iterationSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
+    iterationSimVars := SimCodeUtil.rewriteIndex(iterationSimVars, 1+listLength(simVarParams));
+    innerSimVars := List.map1(innerSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
+    innerSimVars := SimCodeUtil.rewriteIndex(innerSimVars, 1+listLength(simVarParams)+listLength(iterationSimVars));
+    localHT := List.fold(simVarParams, SimCodeUtil.addSimVarToHashTable, localHT);
+    localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
+    localHT := List.fold(iterationSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
+    
+    // res > dep
+    resSimVars := SimCodeUtil.rewriteIndex(resSimVars, listLength(inputSimVars));
+    localHT := List.fold(resSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
+    
+    numVars := listLength(inputSimVars)+listLength(resSimVars);    
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 1+listLength(simVarParams)+listLength(inputSimVars));
+        
+    // create operation of the equations
+    (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs);
+    // set dep and indep  
+    optData := setInDepAndDepVars(inputSimVars, resSimVars, optData);
+    optData.numParameters := 1+listLength(simVarParams)+listLength(iterationSimVars)+listLength(innerSimVars);
+    // set op data name
+    optData.name := modelName + "nls_" + intString(nlsSyst.adolcIndex) + "_2";
+  
+    outOperationData := optData::outOperationData;   
   end for;
 end createOperationDataNLS;
+
+protected function makeAssignEqFromResidualEqs
+  input list<SimCode.SimEqSystem> inEqns;
+  input list<DAE.ComponentRef> inCrefs;
+  output list<SimCode.SimEqSystem> outEqns = {};
+protected
+  list<DAE.ComponentRef> rest = inCrefs;
+algorithm
+  for eq in inEqns loop
+    outEqns := match eq
+      local
+        Integer index;
+        DAE.Exp exp;
+        DAE.ElementSource source;
+        DAE.ComponentRef cref;
+      case SimCode.SES_RESIDUAL(index=index, exp=exp, source=source) equation
+        cref::rest = rest;        
+      then SimCode.SES_SIMPLE_ASSIGN(index, cref, exp, source)::outEqns;
+      else eq::outEqns;
+    end match;
+  end for;
+  outEqns := listReverse(outEqns);
+end makeAssignEqFromResidualEqs;
 
 protected function createSimVarsFromElements
   input list<DAE.Element> elmts; // DAE.VAR
@@ -388,7 +515,7 @@ protected
 algorithm
   (operations, workingArgs) := createOperationDataStmts(funcBody, workingArgs);
   operations := listReverse(operations);
-  outOperationData := OPERATIONDATA(operations, workingArgs.tmpIndex, {}, {}, "");
+  outOperationData := OPERATIONDATA(operations, workingArgs.tmpIndex, {}, {}, "", 0);
 end createOperationsForFunction;
 
 protected function createOperationEqns
@@ -411,7 +538,7 @@ algorithm
         DAE.Exp exp;
         list<DAE.Exp> expLst;
         DAE.ComponentRef cref;
-        list<DAE.ComponentRef> crefs;
+        list<DAE.ComponentRef> crefs, inputCrefs, internalCrefs;
         list<Operation> rest;
         Operation op;
         list<Operand> operands;
@@ -425,12 +552,13 @@ algorithm
 
         // SIMPLE_ASSIGN
         case SimCode.SES_SIMPLE_ASSIGN(index=index, exp=exp, cref=cref) equation
-          //print("SES_SIMPLE_ASSIGN: exp = " + ExpressionDump.printExpStr(exp) + "\t" + ComponentReference.printComponentRefStr(cref) + " .\n");
+          print("collectOperationsForFuncArgs operation : " + ComponentReference.printComponentRefStr(cref) + " = " +  ExpressionDump.printExpStr(exp) +"\n");
           simVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
           simVarOperand = OPERAND_VAR(simVar);
+          print("collectOperationsForFuncArgs assign : ");
           workingArgs.tmpIndex = workingArgs.numVariables;
           ({assignOperand}, operations, workingArgs) = collectOperationsForExp(exp, operations, workingArgs);
-          //print("Done with collectOperationsForExp\n");
+          print("Done with collectOperationsForExp\n");
           if isTmpOperand(assignOperand) then
             op::rest = operations;
             op = replaceOperationResult(op, simVarOperand);
@@ -439,7 +567,7 @@ algorithm
             op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
             operations = op::operations;
           end if;
-          //print("collectOperationsForFuncArgs operation : " +  printOperationStr(op) +"\n");
+          print("collectOperationsForFuncArgs operation : " +  printOperationStr(op) +"\n");
         then ();
 
         case SimCode.SES_RESIDUAL() equation
@@ -484,12 +612,37 @@ algorithm
         then ();
 
         // SES_NONLINEAR
-        case SimCode.SES_NONLINEAR(nlSystem= nlSystem as SimCode.NONLINEARSYSTEM(adolcIndex=adolcIndex, crefs=crefs)) algorithm
-          print("======================Hit a SES_NONLINEAR with index " + intString(adolcIndex) + "\n");
-
-          intOpds := listAppend({OPERAND_INDEX(adolcIndex),OPERAND_INDEX(listLength(crefs))}, intOpds);
+        case SimCode.SES_NONLINEAR(nlSystem= nlSystem as SimCode.NONLINEARSYSTEM(adolcIndex=adolcIndex, inputCrefs=inputCrefs, internalCrefs=internalCrefs, crefs=crefs)) algorithm
+          //print("======================Hit a SES_NONLINEAR with index " + intString(adolcIndex) + "\n");
+          
+          
+          indexX := workingArgs.tmpIndex;
+          i := 0;
+          for cr in inputCrefs loop
+            simVar := BaseHashTable.get(cr, workingArgs.crefToSimVarHT);
+            op := OPERATION({OPERAND_VAR(simVar)}, ASSIGN_ACTIVE(), OPERAND_INDEX(indexX+i));
+            operations := op::operations;
+            i := i + 1;
+          end for;
+          workingArgs.tmpIndex := workingArgs.tmpIndex+i;
+          
+          intOpds := listAppend({OPERAND_INDEX(adolcIndex),OPERAND_INDEX(0),OPERAND_INDEX(0),
+                                 OPERAND_INDEX(1),OPERAND_INDEX(1),
+                                 OPERAND_INDEX(listLength(inputCrefs)),OPERAND_INDEX(indexX),
+                                 OPERAND_INDEX(listLength(crefs)+listLength(internalCrefs)),OPERAND_INDEX(workingArgs.tmpIndex),
+                                 OPERAND_INDEX(1)},
+                                 intOpds);
           result := OPERAND_INDEX(1);
           op := OPERATION(intOpds, EXT_DIFF_V(), result);
+          operations := op::operations;
+
+          i := 0;
+          for cr in listAppend(crefs, internalCrefs) loop
+            simVar := BaseHashTable.get(cr, workingArgs.crefToSimVarHT);
+            op := OPERATION({OPERAND_INDEX(workingArgs.tmpIndex+i)}, ASSIGN_ACTIVE(), OPERAND_VAR(simVar));
+            operations := op::operations;
+            i := i + 1;
+          end for;
 
           workingArgs.nlsSystems := nlSystem::workingArgs.nlsSystems;
         then ();
@@ -587,7 +740,7 @@ algorithm
       maxTmpIndex := intMax(maxTmpIndex, workingArgs.tmpIndex);
     end for;
     operations := listReverse(operations);
-    outOperationData := OPERATIONDATA(operations, maxTmpIndex, {}, {},"");
+    outOperationData := OPERATIONDATA(operations, maxTmpIndex, {}, {}, "", 0);
   else
     Error.addInternalError("createModelInfo failed", sourceInfo());
     fail();
@@ -770,7 +923,7 @@ algorithm
       Absyn.Ident ident;
       Absyn.Path path;
       WorkingStateArgs workingArgs;
-      constant Boolean debug = false;
+      constant Boolean debug = true;
 
     // ICONST
     case (e1 as DAE.ICONST(), (opds, ops, workingArgs)) equation

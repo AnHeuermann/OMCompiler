@@ -614,9 +614,9 @@ algorithm
       (odeEquations,adolcIndex) := setAdolcIndexSystList(odeEquations);
       odeEquations := setAdolcIndexSystList(odeEquations, adolcIndex, false);
       modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations),
-                                                              crefToSimVarHT, modelInfo.varInfo, filenamePrefix,
+                                                              crefToSimVarHT, 2*modelInfo.varInfo.numStateVars+modelInfo.varInfo.numAlgVars , tmpSimVars.paramVars, filenamePrefix,
                                                               funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars);
-      //MathOperation.dumpOperationData(modelOperationData);
+      MathOperation.dumpOperationData(modelOperationData);
       execStat("simCode: ADOLC createOperationData");
     else
       modelOperationData := {};
@@ -5378,7 +5378,7 @@ algorithm
   outVars := List.map1(outVars, setSimVarKind, BackendDAE.SEED_VAR());
 end collectAllSeedVars;
 
-protected function setSimVarKind
+public function setSimVarKind
   input output SimCodeVar.SimVar simVar;
   input BackendDAE.VarKind varKind;
 algorithm
@@ -8382,7 +8382,7 @@ algorithm
     end for;
 end printVarLstCrefs;
 
-protected function dumpVariablesString "dumps a list of SimCode.Variables to stdout.
+public function dumpVariablesString "dumps a list of SimCode.Variables to stdout.
 author: Waurich TUD 2014-09"
   input list<SimCodeFunction.Variable> vars;
   input String delimiter;
@@ -10958,13 +10958,13 @@ algorithm
       list<DAE.ComponentRef> calcedCrefs;
       BackendDAE.Variables vars;
       case(DAE.CREF(componentRef=cr), (inputCrefs, calcedCrefs, vars)) equation
-        print("DEBUG: collectInputVars cref: " + ExpressionDump.printExpStr(inExp) + "\n"); 
+        //print("DEBUG: collectInputVars cref: " + ExpressionDump.printExpStr(inExp) + "\n"); 
         true = ComponentReference.crefNotInLst(cr, calcedCrefs);
         true = ComponentReference.crefNotInLst(cr, inputCrefs);
         (_, _) = BackendVariable.getVar(cr, vars);
         inputCrefs = cr::inputCrefs;
         outArgs = (inputCrefs, calcedCrefs, vars);
-        print("added cref: " + ExpressionDump.printExpStr(inExp) + " to inputVars of NLS System\n");
+        //print("added cref: " + ExpressionDump.printExpStr(inExp) + " to inputVars of NLS System\n");
       then ();
 
       else ();

@@ -33,7 +33,7 @@
 
 #include <adolc/adolc.h>
 #include <adolc/tapedoc/asciitapes.h>
-#include "simulation/solver/adolc_linear_solver.h"
+#include "simulation/solver/adolc_solver.h"
 
 #include "openmodelica.h"
 #include "openmodelica_func.h"
