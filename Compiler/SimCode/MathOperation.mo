@@ -384,7 +384,7 @@ algorithm
     localHT := List.fold(resSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
     //create inner variables
-    crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.internalCrefs);
+    crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.innerCrefs);
     innerSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
     innerSimVars := SimCodeUtil.rewriteIndex(innerSimVars, listLength(iterationSimVars)+listLength(resSimVars));
 
@@ -538,7 +538,7 @@ algorithm
         DAE.Exp exp;
         list<DAE.Exp> expLst;
         DAE.ComponentRef cref;
-        list<DAE.ComponentRef> crefs, inputCrefs, internalCrefs;
+        list<DAE.ComponentRef> crefs, inputCrefs, innerCrefs;
         list<Operation> rest;
         Operation op;
         list<Operand> operands;
@@ -612,7 +612,7 @@ algorithm
         then ();
 
         // SES_NONLINEAR
-        case SimCode.SES_NONLINEAR(nlSystem= nlSystem as SimCode.NONLINEARSYSTEM(adolcIndex=adolcIndex, inputCrefs=inputCrefs, internalCrefs=internalCrefs, crefs=crefs)) algorithm
+        case SimCode.SES_NONLINEAR(nlSystem= nlSystem as SimCode.NONLINEARSYSTEM(adolcIndex=adolcIndex, inputCrefs=inputCrefs, innerCrefs=innerCrefs, crefs=crefs)) algorithm
           //print("======================Hit a SES_NONLINEAR with index " + intString(adolcIndex) + "\n");
           
           
@@ -629,7 +629,7 @@ algorithm
           intOpds := listAppend({OPERAND_INDEX(adolcIndex),OPERAND_INDEX(0),OPERAND_INDEX(0),
                                  OPERAND_INDEX(1),OPERAND_INDEX(1),
                                  OPERAND_INDEX(listLength(inputCrefs)),OPERAND_INDEX(indexX),
-                                 OPERAND_INDEX(listLength(crefs)+listLength(internalCrefs)),OPERAND_INDEX(workingArgs.tmpIndex),
+                                 OPERAND_INDEX(listLength(crefs)+listLength(innerCrefs)),OPERAND_INDEX(workingArgs.tmpIndex),
                                  OPERAND_INDEX(1)},
                                  intOpds);
           result := OPERAND_INDEX(1);
@@ -637,7 +637,7 @@ algorithm
           operations := op::operations;
 
           i := 0;
-          for cr in listAppend(crefs, internalCrefs) loop
+          for cr in listAppend(crefs, innerCrefs) loop
             simVar := BaseHashTable.get(cr, workingArgs.crefToSimVarHT);
             op := OPERATION({OPERAND_INDEX(workingArgs.tmpIndex+i)}, ASSIGN_ACTIVE(), OPERAND_VAR(simVar));
             operations := op::operations;

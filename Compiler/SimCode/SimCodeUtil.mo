@@ -1316,14 +1316,14 @@ algorithm
       local
         Integer index, sysIndex;
         list<SimCode.SimEqSystem> eqs;
-        list<DAE.ComponentRef> crefs, inputCrefs, internalCrefs;
+        list<DAE.ComponentRef> crefs, inputCrefs, innerCrefs;
         Option<SimCode.JacobianMatrix> optSymJac;
         Boolean homotopySupport;
         Boolean mixedSystem;
 
       // no dynamic tearing
-      case (SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, internalCrefs, inputCrefs, sysIndex, optSymJac, homotopySupport, mixedSystem, _), NONE()))
-      then SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, internalCrefs, inputCrefs, sysIndex, optSymJac, homotopySupport, mixedSystem, outAdolcIndex), NONE());
+      case (SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs, inputCrefs, sysIndex, optSymJac, homotopySupport, mixedSystem, _), NONE()))
+      then SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs, inputCrefs, sysIndex, optSymJac, homotopySupport, mixedSystem, outAdolcIndex), NONE());
 
       else
       then eq;
@@ -3734,7 +3734,6 @@ algorithm
        list<SimCodeVar.SimVar> tempvars, tempvars2, simVars;
        list<SimCode.SimEqSystem> simequations, resEqs;
        Integer uniqueEqIndex, nInnerVars;
-       list<DAE.ComponentRef> tcrs, internalCrefs, inputCrefs;
        DAE.FunctionTree functree;
        Option<SimCode.JacobianMatrix> jacobianMatrix;
        list<Integer> tearingVars, residualEqns;
@@ -3824,16 +3823,16 @@ algorithm
        otherVarsInts = List.flatten(otherVarsIntsLst);
        ovarsLst = List.map1r(otherVarsInts, BackendVariable.getVarAt, vars);
        ovarsLst = List.map(ovarsLst, BackendVariable.transformXToXd);
-       internalCrefs = List.map(ovarsLst, BackendVariable.varCref);
+       innerCrefs = List.map(ovarsLst, BackendVariable.varCref);
 
-       (_, (inputCrefs, _, _)) = traverseExpsEqSystems(simequations, collectInputVars, ({}, listAppend(tcrs, internalCrefs), vars), {});
+       (_, (inputCrefs, _, _)) = traverseExpsEqSystems(simequations, collectInputVars, ({}, listAppend(tcrs, innerCrefs), vars), {});
 
        (jacobianMatrix, uniqueEqIndex, tempvars) = createSymbolicSimulationJacobian(inJacobian, uniqueEqIndex, tempvars);
        if not homotopySupport then
          (_, homotopySupport) = BackendEquation.traverseExpsOfEquationList(reqns, BackendDAEUtil.containsHomotopyCall, false);
        end if;
 
-       nlSystem = SimCode.NONLINEARSYSTEM(uniqueEqIndex, simequations, tcrs, internalCrefs, inputCrefs, 0, listLength(tvars)+nInnerVars+listLength(tempvars)-listLength(itempvars), jacobianMatrix, homotopySupport, mixedSystem, true, -1);
+       nlSystem = SimCode.NONLINEARSYSTEM(uniqueEqIndex, simequations, tcrs, innerCrefs, inputCrefs, 0, listLength(tvars)+nInnerVars+listLength(tempvars)-listLength(itempvars), jacobianMatrix, homotopySupport, mixedSystem, true, -1);
        tempvars2 = tempvars;
 
        // Do if dynamic tearing is activated
@@ -3858,16 +3857,16 @@ algorithm
 	       otherVarsInts = List.flatten(otherVarsIntsLst);
 	       ovarsLst = List.map1r(otherVarsInts, BackendVariable.getVarAt, vars);
 	       ovarsLst = List.map(ovarsLst, BackendVariable.transformXToXd);
-	       internalCrefs = List.map(ovarsLst, BackendVariable.varCref);
+	       innerCrefs = List.map(ovarsLst, BackendVariable.varCref);
 	
-	       (_, (inputCrefs, _, _)) = traverseExpsEqSystems(simequations, collectInputVars, ({}, listAppend(tcrs, internalCrefs), vars), {});
+	       (_, (inputCrefs, _, _)) = traverseExpsEqSystems(simequations, collectInputVars, ({}, listAppend(tcrs, innerCrefs), vars), {});
 
          (jacobianMatrix, uniqueEqIndex, tempvars2) = createSymbolicSimulationJacobian(inJacobian, uniqueEqIndex, tempvars2);
          if not homotopySupport then
            (_, homotopySupport) = BackendEquation.traverseExpsOfEquationList(reqns, BackendDAEUtil.containsHomotopyCall, false);
          end if;
 
-         alternativeTearingNl = SOME(SimCode.NONLINEARSYSTEM(uniqueEqIndex, simequations, tcrs, internalCrefs, inputCrefs, 0, listLength(tvars)+nInnerVars+listLength(tempvars2)-listLength(tempvars), jacobianMatrix, homotopySupport, mixedSystem, true, -1));
+         alternativeTearingNl = SOME(SimCode.NONLINEARSYSTEM(uniqueEqIndex, simequations, tcrs, innerCrefs, inputCrefs, 0, listLength(tvars)+nInnerVars+listLength(tempvars2)-listLength(tempvars), jacobianMatrix, homotopySupport, mixedSystem, true, -1));
        else
          alternativeTearingNl = NONE();
        end if;
@@ -8541,7 +8540,7 @@ algorithm
       DAE.ComponentRef cref,left;
       SimCode.SimEqSystem cont;
       list<DAE.ComponentRef> crefs,crefs2,conds;
-      list<DAE.ComponentRef> internalCrefs,inputCrefs;
+      list<DAE.ComponentRef> innerCrefs,inputCrefs;
       list<DAE.Statement> stmts;
       list<SimCode.SimEqSystem> elsebranch,discEqs,eqs,eqs2,residual,residual2;
       list<SimCodeVar.SimVar> vars,vars2,discVars;
@@ -8612,11 +8611,11 @@ algorithm
     then s;
 
     // no dynamic tearing
-    case(SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index=idx,indexNonLinearSystem=idxNLS,jacobianMatrix=jac,eqs=eqs, crefs=crefs, internalCrefs=internalCrefs, inputCrefs=inputCrefs), NONE()))
+    case(SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index=idx,indexNonLinearSystem=idxNLS,jacobianMatrix=jac,eqs=eqs, crefs=crefs, innerCrefs=innerCrefs, inputCrefs=inputCrefs), NONE()))
       equation
         s = intString(idx) +": "+ " (NONLINEAR) index:"+intString(idxNLS)+" jacobian: "+boolString(Util.isSome(jac))+"\n";
         s = s+"crefs: "+stringDelimitList(List.map(crefs,ComponentReference.printComponentRefStr)," , ")+"\n";
-        s = s+"dep-crefs: "+stringDelimitList(List.map(internalCrefs,ComponentReference.printComponentRefStr)," , ")+"\n";
+        s = s+"inner-crefs: "+stringDelimitList(List.map(innerCrefs,ComponentReference.printComponentRefStr)," , ")+"\n";
         s = s+"input-crefs: "+stringDelimitList(List.map(inputCrefs,ComponentReference.printComponentRefStr)," , ")+"\n";
         s = s+"\t";
         s = s+stringDelimitList(List.map(eqs,simEqSystemString),"\n\t");
