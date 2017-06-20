@@ -501,7 +501,9 @@ uniontype NonlinearSystem
   record NONLINEARSYSTEM
     Integer index;
     list<SimEqSystem> eqs;
-    list<DAE.ComponentRef> crefs;
+    list<DAE.ComponentRef> crefs; // iteration vars
+    list<DAE.ComponentRef> internalCrefs; // dependend vars
+    list<DAE.ComponentRef> inputCrefs; // input vars
     Integer indexNonLinearSystem;
     Integer nUnknowns "Number of variables that are solved in this system. Needed because 'crefs' only contains the iteration variables.";
     Option<JacobianMatrix> jacobianMatrix;

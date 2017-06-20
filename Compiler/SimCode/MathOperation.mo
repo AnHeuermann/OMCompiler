@@ -326,7 +326,7 @@ algorithm
 
     localHT := HashTableCrefSimVar.emptyHashTable();
 
-    // create input variables
+    // create iterations variables
     crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.crefs);
     iterationSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
     iterationSimVars := SimCodeUtil.rewriteIndex(iterationSimVars, 0);
