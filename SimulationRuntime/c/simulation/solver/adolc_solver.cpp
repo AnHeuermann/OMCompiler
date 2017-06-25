@@ -34,7 +34,10 @@
 #include <string.h>
 #include <vector>
 #include <adolc/edfclasses.h>
-
+#include <adolc/taping.h>
+#include <adolc/interfaces.h>
+#include <adolc/drivers/drivers.h>
+#include <adolc/tapedoc/asciitapes.h>
 
 extern "C" int dgesv_(int *n, int *nrhs, double *a, int *lda,
                   int *ipiv, double *b, int *ldb, int *info);
@@ -238,7 +241,7 @@ class NonLinearSolverEdf : public EDFobject_v2 {
 protected:
     short trace1, trace2, nexttag;
 public:
-    NonLinearSolverEdf(const char* nlsbase);
+    NonLinearSolverEdf(const char* nlsfbase, short tagstart);
     virtual ~NonLinearSolverEdf() {}
     virtual int function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
     virtual int zos_forward(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
@@ -249,7 +252,7 @@ public:
     short get_next_tag() const { return nexttag; }
 };
 
-static std::vector<NonLinearSolverEdf> nonlinSolEdfVec;
+static std::vector<NonLinearSolverEdf> nonLinSolEdfVec;
 
 
 NonLinearSolverEdf::NonLinearSolverEdf(const char* nlsfbase, short tagstart) : EDFobject_v2() {
@@ -278,7 +281,7 @@ int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int 
     tapestats(trace1, stats1);
     int num_resid1 = stats1[NUM_DEPENDENTS];
     int num_indep1 = stats1[NUM_INDEPENDENTS]; // should be == outsz[0]
-    int num_param1 = stats1[NUM_PARAMS]; // should be numouterparams + insz[0]
+    int num_param1 = stats1[NUM_PARAM]; // should be numouterparams + insz[0]
     double* allparams1 = (double*) calloc(num_param1,sizeof(double));
     for (i = 0; i < numouterparams; i++)
         allparams1[i] = outerparams[i];
@@ -287,14 +290,14 @@ int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int 
     set_param_vec(trace1, num_param1, allparams1);
     double **J;
     // allocate J as jacobian of resid w.r.t. y (sparse or dense) depending on
-w    // solver
+    // solver
     // set initial values in y[0]
     // compute jacobian resid wrt y sparse or dense
-    jacobian(trace1, num_resid, num_indep, y[0], J);
+    jacobian(trace1, num_resid1, num_indep1, y[0], J);
     // or using sparse_jac()
     // call solver iteration with y and j until convergence
-    free(outerparams);
     free(allparams1);
+    free(outerparams);
     return 0;
 }
 
@@ -305,6 +308,8 @@ int NonLinearSolverEdf::zos_forward(int iArrLen, int *iArr, int nin, int nout, i
 
 
 int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, double **xp, int *outsz, double **y, double **yp, void *ctx) {
+    int numouterparams, i;
+    double *outerparams;
     // do everything as in function then
     // finally compute jacobian or resid wrt y after convergence in J
 
@@ -312,21 +317,20 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     tapestats(trace2, stats2);
     int num_resid2 = stats2[NUM_DEPENDENTS];
     int num_indep2 = stats2[NUM_INDEPENDENTS]; // should be == insz[0]
-    int num_param2 = stats2[NUM_PARAMS]; // should be numouterparams + outsz[0]
+    int num_param2 = stats2[NUM_PARAM]; // should be numouterparams + outsz[0]
     double* allparams2 = (double*) calloc(num_param2,sizeof(double));
     double* resid = (double*) calloc(num_resid2,sizeof(double));
     for (i = 0; i < numouterparams; i++)
         allparams2[i] = outerparams[i];
     for (i = 0; i < outsz[0]; i++)
         allparams2[numouterparams+i] = y[0][i];
-    set_param_vec(trace2, num_param, allparams2);
+    set_param_vec(trace2, num_param2, allparams2);
     // allocate J2 as directional deriv of resid w.r.t. x
     double *J2;
-    fos_forward(trace2, num_resid, num_indep, x[0], xp[0], resid, J2);
+    ::fos_forward(trace2, num_resid2, num_indep2, 0, x[0], xp[0], resid, J2);
     // solve yp[0] = - J^{-1} * J2 using a linear solver
 
     free(outerparams);
-    free(allparams1);
     free(allparams2);
     free(resid);
     return 0;
