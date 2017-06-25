@@ -235,8 +235,10 @@ int LinearSolverEdf::fov_reverse(int iArrLen, int* iArr, int nout, int nin, int 
 /* =============== */
 
 class NonLinearSolverEdf : public EDFobject_v2 {
+protected:
+    short trace1, trace2, nexttag;
 public:
-    NonLinearSolverEdf();
+    NonLinearSolverEdf(const char* nlsbase);
     virtual ~NonLinearSolverEdf() {}
     virtual int function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
     virtual int zos_forward(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
@@ -244,19 +246,56 @@ public:
     virtual int fov_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, int ndir, double ***Xp, int *outsz, double **y, double ***Yp, void* ctx);
     virtual int fos_reverse(int iArrLen, int* iArr, int nout, int nin, int *outsz, double **up, int *insz, double **zp, double **x, double **y, void *ctx);
     virtual int fov_reverse(int iArrLen, int* iArr, int nout, int nin, int *outsz, int dir, double ***Up, int *insz, double ***Zp, double **x, double **y, void* ctx);
+    short get_next_tag() const { return nexttag; }
 };
 
 static std::vector<NonLinearSolverEdf> nonlinSolEdfVec;
 
 
-NonLinearSolverEdf::NonLinearSolverEdf(){
-
+NonLinearSolverEdf::NonLinearSolverEdf(const char* nlsfbase, short tagstart) : EDFobject_v2() {
+    char *nlsfilename1, *nlsfilename2;
+    size_t slen = strlen(nlsfbase);
+    nlsfilename1 = new char[slen + 10];
+    nlsfilename2 = new char[slen + 10];
+    sprintf(nlsfilename1,"%s_1_aat.txt",nlsfbase);
+    sprintf(nlsfilename2,"%s_2_aat.txt",nlsfbase);
+    trace1 = tagstart;
+    tagstart = read_ascii_trace(nlsfilename1,tagstart);
+    trace2 = tagstart;
+    tagstart = read_ascii_trace(nlsfilename2,tagstart);
+    nexttag = tagstart;
 }
 
 int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
-
-
-  return 0;
+    // assumption: nin == 1, nout == 1
+    //             insz[0] == sizeof input vars x
+    //             outsz[0] == sizeof output vars y
+    int numouterparams, i;
+    double *outerparams;
+    numouterparams = alloc_copy_current_params(&outerparams);
+    // solver takes input from x, jacobian from trace1 and gives output y
+    size_t stats1[STAT_SIZE];
+    tapestats(trace1, stats1);
+    int num_resid1 = stats1[NUM_DEPENDENTS];
+    int num_indep1 = stats1[NUM_INDEPENDENTS]; // should be == outsz[0]
+    int num_param1 = stats1[NUM_PARAMS]; // should be numouterparams + insz[0]
+    double* allparams1 = (double*) calloc(num_param1,sizeof(double));
+    for (i = 0; i < numouterparams; i++)
+        allparams1[i] = outerparams[i];
+    for (i = 0; i < insz[0]; i++)
+        allparams1[numouterparams+i] = x[0][i];
+    set_param_vec(trace1, num_param1, allparams1);
+    double **J;
+    // allocate J as jacobian of resid w.r.t. y (sparse or dense) depending on
+w    // solver
+    // set initial values in y[0]
+    // compute jacobian resid wrt y sparse or dense
+    jacobian(trace1, num_resid, num_indep, y[0], J);
+    // or using sparse_jac()
+    // call solver iteration with y and j until convergence
+    free(outerparams);
+    free(allparams1);
+    return 0;
 }
 
 int NonLinearSolverEdf::zos_forward(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
@@ -266,14 +305,39 @@ int NonLinearSolverEdf::zos_forward(int iArrLen, int *iArr, int nin, int nout, i
 
 
 int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, double **xp, int *outsz, double **y, double **yp, void *ctx) {
+    // do everything as in function then
+    // finally compute jacobian or resid wrt y after convergence in J
 
+    size_t stats2[STAT_SIZE];
+    tapestats(trace2, stats2);
+    int num_resid2 = stats2[NUM_DEPENDENTS];
+    int num_indep2 = stats2[NUM_INDEPENDENTS]; // should be == insz[0]
+    int num_param2 = stats2[NUM_PARAMS]; // should be numouterparams + outsz[0]
+    double* allparams2 = (double*) calloc(num_param2,sizeof(double));
+    double* resid = (double*) calloc(num_resid2,sizeof(double));
+    for (i = 0; i < numouterparams; i++)
+        allparams2[i] = outerparams[i];
+    for (i = 0; i < outsz[0]; i++)
+        allparams2[numouterparams+i] = y[0][i];
+    set_param_vec(trace2, num_param, allparams2);
+    // allocate J2 as directional deriv of resid w.r.t. x
+    double *J2;
+    fos_forward(trace2, num_resid, num_indep, x[0], xp[0], resid, J2);
+    // solve yp[0] = - J^{-1} * J2 using a linear solver
 
-  return 0;
+    free(outerparams);
+    free(allparams1);
+    free(allparams2);
+    free(resid);
+    return 0;
 }
 
 
 
 int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, int ndir, double ***Xp, int *outsz, double **y, double ***Yp, void* ctx) {
+
+    // almost same as fos_forward
+    // use fov_forward for computing j2 instead
 
   return 0;
 }
@@ -299,12 +363,12 @@ unsigned int alloc_adolc_lin_sol(int nnz, int nb, int nx) {
     return linSolEdfVec.back().get_index();
 }
 
-unsigned int alloc_adolc_nonlin_sol(int nnz, int nb, int nx) {
-    int insz[2], outsz[1];
-    insz[0] = nnz;
-    insz[1] = nb;
-    outsz[0] = nx;
-    linSolEdfVec.emplace_back();
-    linSolEdfVec.back().allocate_mem(2,1,insz,outsz);
-    return linSolEdfVec.back().get_index();
+unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny,short* usetag) {
+    int insz[1], outsz[1];
+    insz[0] = nx;
+    outsz[0] = ny;
+    nonLinSolEdfVec.emplace_back(fbase,*usetag);
+    nonLinSolEdfVec.back().allocate_mem(1,1,insz,outsz);
+    *usetag = nonLinSolEdfVec.back().get_next_tag();
+    return nonLinSolEdfVec.back().get_index();
 }
