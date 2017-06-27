@@ -40,7 +40,9 @@ extern "C" {
 
 unsigned int alloc_adolc_lin_sol(int nnz, int nb, int nx);
 
-unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny,short* usetag);
+unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny1, int ny2,short* usetag);
+
+double *adolc_nonlin_sol_get_values_buffer(int index);
 
 #ifdef __cplusplus
 }

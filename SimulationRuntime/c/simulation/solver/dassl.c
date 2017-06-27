@@ -149,6 +149,42 @@ void initialize_linearSystems(DATA *data)
 	}
 }
 
+void initialize_nonLinearSystems(DATA *data, short* usertag)
+{
+	NONLINEAR_SYSTEM_DATA *nlsData = data->simulationInfo->nonlinearSystemData;
+	char filename[128];
+	int i;
+	unsigned int outIdx;
+	for(i=0; i <data->modelData->nNonLinearSystems; i++)
+	{
+		if (nlsData[i].adolcIndex>=0){
+
+		  sprintf(filename, "%s_nls_%ld", data->modelData->modelFilePrefix, nlsData[i].adolcIndex);
+		  outIdx = alloc_adolc_nonlin_sol(filename, nlsData[i].size_inputVars, nlsData[i].size_innerVars, nlsData[i].size, usertag);
+		  if (outIdx != nlsData[i].adolcIndex){
+			  errorStreamPrint(LOG_STDOUT, 0, "ADOLC non-linear system index does not match! %u != %ld", outIdx, nlsData[i].adolcIndex);
+		  }
+		  infoStreamPrint(LOG_STDOUT, 0, "Adolc non-linear system outIndex %u", outIdx);
+		}
+	}
+}
+
+void setAllNonLinearIterationVars(DATA *data)
+{
+	NONLINEAR_SYSTEM_DATA *nlsData = data->simulationInfo->nonlinearSystemData;
+	double *buffer;
+	int i,j;
+	unsigned int outIdx;
+	for(i=0,j=0; i <data->modelData->nNonLinearSystems; i++)
+	{
+		if (nlsData[i].adolcIndex>=0){
+		    buffer = adolc_nonlin_sol_get_values_buffer(j);
+		    nlsData[i].getIterationVars(data, buffer);
+		    j++;
+		}
+	}
+}
+
 int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo, DASSL_DATA *dasslData)
 {
   TRACE_PUSH
@@ -370,6 +406,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       break;
     case ADOLC:
       /* alloc adolc */
+      data->simulationInfo->adolcTag = 0;
 
       if(measure_time_flag)
       {
@@ -381,14 +418,16 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
 
       // allocate memory for linear systems
       initialize_linearSystems(data);
+      // allocate memory for non-linear systems
+      initialize_nonLinearSystems(data, &data->simulationInfo->adolcTag );
 
       sprintf(filename, "%s_aat.txt", data->modelData->modelFilePrefix);
       sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
-      read_ascii_trace(filename, 0);
+      read_ascii_trace(filename, data->simulationInfo->adolcTag);
       //tapestats(0,stats);
       //dasslData->adolc_num_params = stats[NUM_PARAM];
       //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
-      write_ascii_trace(filename2, 0);
+      write_ascii_trace(filename2, data->simulationInfo->adolcTag);
       //dasslData->residualFunction = functionODE_residualADOLC;
       dasslData->jacobianFunction =  JacobianADOLC;
       if(measure_time_flag)
@@ -396,7 +435,6 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
         rt_accumulate(SIM_TIMER_ADOLC_INIT);
         fprintf(stderr, "Time to prepare Adolc Data: %f\n", rt_accumulated(SIM_TIMER_ADOLC_INIT));
       }
-
       break;
     case ADOLCSPARSE:
       if(measure_time_flag)

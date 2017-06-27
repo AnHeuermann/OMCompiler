@@ -2479,6 +2479,9 @@ template generateNonLinearSystemData(NonlinearSystem system, Integer indexStrict
       nonLinearSystemData[<%nls.indexNonLinearSystem%>].initializeStaticNLSData = initializeStaticDataNLS<%nls.index%>;
       nonLinearSystemData[<%nls.indexNonLinearSystem%>].getIterationVars = getIterationVarsNLS<%nls.index%>;
       nonLinearSystemData[<%nls.indexNonLinearSystem%>].checkConstraints = <%constraintsCall%>;
+      nonLinearSystemData[<%nls.indexNonLinearSystem%>].size_innerVars = <%listLength(nls.innerCrefs)%>;
+      nonLinearSystemData[<%nls.indexNonLinearSystem%>].size_inputVars = <%listLength(nls.inputCrefs)%>;
+      nonLinearSystemData[<%nls.indexNonLinearSystem%>].adolcIndex = <%adolcIndex%>;
       >>
 end generateNonLinearSystemData;
 

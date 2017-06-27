@@ -339,8 +339,8 @@ algorithm
 
     // Torn system
     //   x   -> inputVars
-    //   y1  -> interation vars
-    //   y2  -> internal vars
+    //   y1  -> inner vars
+    //   y2  -> interation vars
     //   res -> residuals vars
     if debug then
       print("Create operation list for nlsSystem index: " + intString(nlsSyst.adolcIndex) + "\n");
@@ -354,8 +354,8 @@ algorithm
 
     // create Trace 1
     //   time, p, x -> parameters
-    //   y1  -> independets
-    //   res -> dependets
+    //   y2  -> independents
+    //   res -> dependents
 
     localHT := HashTableCrefSimVar.emptyHashTable();
 
@@ -403,10 +403,23 @@ algorithm
   
     outOperationData := optData::outOperationData;    
 
+    // create Trace 3
+    //   time, p, x -> parameters
+    //   y2 -> independents
+    //   y1 -> dependents
+
+    // set dep and indep
+    optData := setInDepAndDepVars(iterationSimVars, innerSimVars, optData);
+    optData.numParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
+    // set op data name
+    optData.name := modelName + "nls_" + intString(nlsSyst.adolcIndex) + "_3";
+
+    outOperationData := optData::outOperationData;
+
     // create Trace 2
-    //   time, p, y -> parameters
-    //   x  -> independets
-    //   res -> dependets
+    //   time, p, y2 -> parameters
+    //   x      -> independents
+    //   res,y1 -> dependents
     localHT := HashTableCrefSimVar.emptyHashTable();
     
     // x -> indep
@@ -417,24 +430,25 @@ algorithm
     // y -> params
     iterationSimVars := List.map1(iterationSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
     iterationSimVars := SimCodeUtil.rewriteIndex(iterationSimVars, 1+listLength(simVarParams));
-    innerSimVars := List.map1(innerSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
-    innerSimVars := SimCodeUtil.rewriteIndex(innerSimVars, 1+listLength(simVarParams)+listLength(iterationSimVars));
+
     localHT := List.fold(simVarParams, SimCodeUtil.addSimVarToHashTable, localHT);
-    localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
     localHT := List.fold(iterationSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
     
     // res > dep
     resSimVars := SimCodeUtil.rewriteIndex(resSimVars, listLength(inputSimVars));
     localHT := List.fold(resSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
+    // inner -> dep
+    innerSimVars := SimCodeUtil.rewriteIndex(innerSimVars, listLength(inputSimVars)+listLength(resSimVars));
+    localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
     
-    numVars := listLength(inputSimVars)+listLength(resSimVars);    
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 1+listLength(simVarParams)+listLength(inputSimVars));
+    numVars := listLength(inputSimVars)+listLength(resSimVars)+listLength(innerSimVars);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 1+listLength(simVarParams)+listLength(iterationSimVars));
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs);
     // set dep and indep  
-    optData := setInDepAndDepVars(inputSimVars, resSimVars, optData);
-    optData.numParameters := 1+listLength(simVarParams)+listLength(iterationSimVars)+listLength(innerSimVars);
+    optData := setInDepAndDepVars(inputSimVars, listAppend(resSimVars,innerSimVars), optData);
+    optData.numParameters := 1+listLength(simVarParams)+listLength(iterationSimVars);
     // set op data name
     optData.name := modelName + "nls_" + intString(nlsSyst.adolcIndex) + "_2";
   
