@@ -43,12 +43,24 @@
 
 #include "simulation/solver/adolc_solver.h"
 
+extern "C" {
 
-extern "C" int dgesv_(int *n, int *nrhs, double *a, int *lda,
-                  int *ipiv, double *b, int *ldb, int *info);
+int dgetrf_(int *m, int *n, double *a, int *lda,
+            int *ipiv, int *info);
 
-extern "C" int dgemv_(char* trans, int* m, int *n, double *alpha, double *A,
-                  int *lda, double *x, int *incx, double *beta, double *y, int *incy);
+int dgetrs_(char* trans, int *n, int *nrhs, double *a, int *lda, int *ipiv,
+            double *b, int *ldb, int *info);
+
+int dgesv_(int *n, int *nrhs, double *a, int *lda,
+           int *ipiv, double *b, int *ldb, int *info);
+
+int dgemv_(char* trans, int* m, int *n, double *alpha, double *A,
+           int *lda, double *x, int *incx, double *beta, double *y, int *incy);
+
+int dgemm_(char* transa, char* transb, int* m, int* n, int* k, double* alpha, 
+           double* a, int* lda, double* b, int* ldb, double* beta, double* c, 
+           int* ldc);
+}
 
 class LinearSolverEdf : public EDFobject_v2 {
 public:
@@ -323,11 +335,11 @@ int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int 
     // assumption: nin == 1, nout == 2
     //             insz[0] == sizeof input vars x
     //             outsz[0] == sizeof output vars y1
-	//             outsz[1] == sizeof output vars y2
+    //             outsz[1] == sizeof output vars y2
     int numouterparams, i;
     double *outerparams;
     numouterparams = alloc_copy_current_params(&outerparams);
-    // solver takes input from x, jacobian from trace1 and gives output y
+    // solver takes input from x, jacobian from trace1 and gives output y2
     size_t stats1[STAT_SIZE];
     tapestats(trace1, stats1);
     int num_resid1 = stats1[NUM_DEPENDENTS];
@@ -339,7 +351,7 @@ int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int 
     for (i = 0; i < insz[0]; i++)
         allparams1[numouterparams+i] = x[0][i];
     set_param_vec(trace1, num_param1, allparams1);
-    // call solver iteration with y and J until convergence
+    // call solver iteration with y2 and J until convergence
     _omc_newton(wrapper_fvec_newton_adolc,data,reinterpret_cast<void*>(this));
     if (data->info <0){
     	throw FatalError(data->info, "Nonlinear solver failed!", __func__, __FILE__, __LINE__);
@@ -347,6 +359,7 @@ int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int 
     for(i=0;i<outsz[1];i++) {
     	y[1][i] = data->x[i];
     }
+    set_param_vec(trace3, num_param1, allparams1);
     ::zos_forward(trace3,outsz[1],outsz[0],0,y[1],y[0]);
     free(allparams1);
     free(outerparams);
@@ -360,15 +373,15 @@ int NonLinearSolverEdf::zos_forward(int iArrLen, int *iArr, int nin, int nout, i
 
 
 int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, double **xp, int *outsz, double **y, double **yp, void *ctx) {
-	// do everything as in function
+    // do everything as in function
     // assumption: nin == 1, nout == 2
     //             insz[0] == sizeof input vars x
     //             outsz[0] == sizeof output vars y1
-	//             outsz[1] == sizeof output vars y2
+    //             outsz[1] == sizeof output vars y2
     int numouterparams, i;
     double *outerparams;
     numouterparams = alloc_copy_current_params(&outerparams);
-    // solver takes input from x, jacobian from trace1 and gives output y
+    // solver takes input from x, jacobian from trace1 and gives output y2
     size_t stats1[STAT_SIZE];
     tapestats(trace1, stats1);
     int num_resid1 = stats1[NUM_DEPENDENTS];
@@ -391,9 +404,11 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     double **J1 = myalloc2(outsz[1],outsz[1]);
     jacobian(trace1,outsz[1],outsz[1],y[1],J1);
     double **J3 = myalloc2(outsz[1],outsz[0]);
+    set_param_vec(trace3, num_param1, allparams1);
     jacobian(trace3,outsz[1],outsz[0],y[1],J3);
+    free(allparams1);
 
-    // finally compute jacobian or resid wrt y after convergence in J
+    // finally compute jacobian or resid,y1 wrt y2 after convergence in J
     size_t stats2[STAT_SIZE];
     tapestats(trace2, stats2);
     int num_depen2 = stats2[NUM_DEPENDENTS];// should be == outsz[0] + outsz[1]
@@ -420,6 +435,7 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     int nrhs = 1;
     int info;
 
+    /*
     double* A = (double*) malloc(outsz[1]*outsz[1]*sizeof(double));
     for(int i = 0; i<outsz[1]; ++i){
       for(int j = 0; j<outsz[1]; ++j){
@@ -427,6 +443,9 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
       }
       //printf("A[%d, %d] = %f\n", iArr[2*i], iArr[2*i+1], A[iArr[2*i]+iArr[2*i+1]*nb]);
     }
+    */
+    char trans = 'T';
+    double* A = &J1[0][0];
 
     double* b = yp[1];
     for(int i=0; i<outsz[1]; ++i){
@@ -434,11 +453,21 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
       //printf("b[%d] = %f\n", i, b[i]);
     }
     int *ipriv = (int*) calloc(outsz[1], sizeof(int));
-
-    dgesv_(&outsz[1], &nrhs, A, &outsz[1], ipriv, b, &outsz[1], &info);
+    
+    dgetrf_(&outsz[1], &outsz[1], A, &outsz[1], ipriv, &info);
+    if (info == 0) {
+        dgetrs_(&trans, &outsz[1], &nrhs, A, &outsz[1], ipriv, b, &outsz[1], &info);
+    }
+    if (info < 0) {
+        printf("fos_forward: Error solving linear system of equations. Argument %d illegal.\n", info);
+        return -1;
+    }
+    //dgesv_(&outsz[1], &nrhs, A, &outsz[1], ipriv, b, &outsz[1], &info);
 
     free(ipriv);
-    free(A);
+    myfree2(J1);
+
+    //free(A);
     // compute yp[0] = J3*yp[1] + dy1/dx <=> yp[0] = A*yp[1]+b
 
     A = &J3[0][0];
@@ -447,14 +476,12 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
       b[i] = J2[outsz[1]+i];
       //printf("b[%d] = %f\n", i, b[i]);
     }
-    char trans = 'T';
     double alpha = 1.0;
     double beta = 1.0;
     int incx = 1;
     dgemv_(&trans, &outsz[1], &outsz[0], &alpha, A, &outsz[1], yp[1], &incx, &beta, b, &incx);
 
     myfree2(J3);
-    myfree2(J1);
     free(J2);
     free(outerparams);
     free(allparams2);
@@ -466,9 +493,110 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
 int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, int ndir, double ***Xp, int *outsz, double **y, double ***Yp, void* ctx) {
 
     // almost same as fos_forward
-    // use fov_forward for computing j2 instead
+    // do everything as in function
+    // assumption: nin == 1, nout == 2
+    //             insz[0] == sizeof input vars x
+    //             outsz[0] == sizeof output vars y1
+    //             outsz[1] == sizeof output vars y2
+    int numouterparams, i;
+    double *outerparams;
+    numouterparams = alloc_copy_current_params(&outerparams);
+    // solver takes input from x, jacobian from trace1 and gives output y2
+    size_t stats1[STAT_SIZE];
+    tapestats(trace1, stats1);
+    int num_resid1 = stats1[NUM_DEPENDENTS];
+    int num_indep1 = stats1[NUM_INDEPENDENTS]; // should be == outsz[1]
+    int num_param1 = stats1[NUM_PARAM]; // should be numouterparams + insz[0]
+    double* allparams1 = (double*) calloc(num_param1,sizeof(double));
+    for (i = 0; i < numouterparams; i++)
+        allparams1[i] = outerparams[i];
+    for (i = 0; i < insz[0]; i++)
+        allparams1[numouterparams+i] = x[0][i];
+    set_param_vec(trace1, num_param1, allparams1);
+    // call solver iteration with y and J until convergence
+    _omc_newton(wrapper_fvec_newton_adolc,data,reinterpret_cast<void*>(this));
+    if (data->info <0){
+    	throw FatalError(data->info, "Nonlinear solver failed!", __func__, __FILE__, __LINE__);
+    }
+    for(i=0;i<outsz[1];i++) {
+    	y[1][i] = data->x[i];
+    }
+    double **J1 = myalloc2(outsz[1],outsz[1]);
+    jacobian(trace1,outsz[1],outsz[1],y[1],J1);
+    double **J3 = myalloc2(outsz[1],outsz[0]);
+    set_param_vec(trace3, num_param1, allparams1);
+    jacobian(trace3,outsz[1],outsz[0],y[1],J3);
+    free(allparams1);
 
-  return 0;
+    // finally compute jacobian or resid,y1 wrt y2 after convergence in J
+    size_t stats2[STAT_SIZE];
+    tapestats(trace2, stats2);
+    int num_depen2 = stats2[NUM_DEPENDENTS];// should be == outsz[0] + outsz[1]
+    int num_indep2 = stats2[NUM_INDEPENDENTS]; // should be == insz[0]
+    int num_param2 = stats2[NUM_PARAM]; // should be numouterparams
+    double* allparams2 = (double*) calloc(num_param2,sizeof(double));
+    double* depen = (double*) calloc(num_depen2,sizeof(double));
+    for (i = 0; i < numouterparams; i++)
+        allparams2[i] = outerparams[i];
+    for (i = 0; i < outsz[0]; i++)
+        allparams2[numouterparams+i] = y[1][i];
+    set_param_vec(trace2, num_param2, allparams2);
+    // use fov_forward for computing j2 instead
+    // allocate J2 as directional deriv of resid w.r.t. x
+    double **J2 = myalloc2(num_depen2,ndir);
+    ::fov_forward(trace2, num_depen2, num_indep2, ndir, x[0], Xp[0], depen, J2);
+    for (i=0;i<outsz[0];i++) {
+        	y[0][i] = depen[outsz[1]+i];
+    }
+    free(depen);
+    // First outsz[1] rows of J2 contain dr/dx, next outsz[0] rows contain dy1/dx
+    // solve yp[1] = - J1^{-1} * dr/dx using a linear solver
+
+    int nrhs = ndir;
+    int info;
+    char trans = 'T';
+    double* A = &J1[0][0];
+
+    double** b = Yp[1];
+    for(int i=0; i<outsz[1]; ++i){
+        for(int j=0; j<ndir; ++j) {
+            b[i][j] = -J2[i][j];
+      //printf("b[%d] = %f\n", i, b[i])
+        };
+    }
+    int *ipriv = (int*) calloc(outsz[1], sizeof(int));
+    
+    dgetrf_(&outsz[1], &outsz[1], A, &outsz[1], ipriv, &info);
+    if (info == 0) {
+        dgetrs_(&trans, &outsz[1], &nrhs, A, &outsz[1], ipriv, &b[0][0], &outsz[1], &info);
+    }
+    if (info < 0) {
+        printf("fos_forward: Error solving linear system of equations. Argument %d illegal.\n", info);
+        return -1;
+    }
+    free(ipriv);
+    myfree2(J1);
+
+    //free(A);
+    // compute yp[0] = J3*yp[1] + dy1/dx <=> yp[0] = A*yp[1]+b
+
+    A = &J3[0][0];
+    double alpha = 1.0;
+    double beta = 1.0;
+    int incx = 1;
+    b = Yp[0];
+    for(int k=0; k<ndir; ++k) {
+        for(int i=0; i<outsz[0]; ++i){
+            b[i][k] = J2[outsz[1]+i][k];
+            //printf("b[%d] = %f\n", i, b[i]);
+        }
+    }
+    dgemm_(&trans,&trans,&ndir,&outsz[1],&outsz[1],&alpha,&Yp[1][0][0],&outsz[1],A,&outsz[1],&beta,&b[0][0],&ndir);
+    myfree2(J3);
+    myfree2(J2);
+    free(outerparams);
+    free(allparams2);
+    return 0;
 }
 
 
