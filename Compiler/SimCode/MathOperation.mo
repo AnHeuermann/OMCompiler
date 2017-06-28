@@ -641,22 +641,25 @@ algorithm
           workingArgs.tmpIndex := workingArgs.tmpIndex+i;
           
           intOpds := listAppend({OPERAND_INDEX(adolcIndex),OPERAND_INDEX(0),OPERAND_INDEX(0),
-                                 OPERAND_INDEX(1),OPERAND_INDEX(1),
+                                 OPERAND_INDEX(1),OPERAND_INDEX(2),
                                  OPERAND_INDEX(listLength(inputCrefs)),OPERAND_INDEX(indexX),
-                                 OPERAND_INDEX(listLength(crefs)+listLength(innerCrefs)),OPERAND_INDEX(workingArgs.tmpIndex),
+                                 OPERAND_INDEX(listLength(innerCrefs)),OPERAND_INDEX(workingArgs.tmpIndex),
+                                 OPERAND_INDEX(listLength(crefs)),OPERAND_INDEX(workingArgs.tmpIndex+listLength(innerCrefs)),
                                  OPERAND_INDEX(1)},
                                  intOpds);
-          result := OPERAND_INDEX(1);
+          result := OPERAND_INDEX(2);
           op := OPERATION(intOpds, EXT_DIFF_V(), result);
           operations := op::operations;
 
           i := 0;
-          for cr in listAppend(crefs, innerCrefs) loop
+          for cr in listAppend(innerCrefs, crefs) loop
             simVar := BaseHashTable.get(cr, workingArgs.crefToSimVarHT);
             op := OPERATION({OPERAND_INDEX(workingArgs.tmpIndex+i)}, ASSIGN_ACTIVE(), OPERAND_VAR(simVar));
             operations := op::operations;
             i := i + 1;
           end for;
+
+          workingArgs.tmpIndex := indexX;
 
           workingArgs.nlsSystems := nlSystem::workingArgs.nlsSystems;
         then ();
