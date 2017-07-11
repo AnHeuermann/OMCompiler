@@ -65,6 +65,7 @@ typedef struct DATA_NEWTON
   int factorization;
   int numberOfIterations; /* over the whole simulation time */
   int numberOfFunctionEvaluations; /* over the whole simulation time */
+  char trans;  /* normal column wise, with adolc row wise */
 
   /* damped newton */
   double* x_new;

@@ -103,6 +103,7 @@ int allocateNewtonData(int size, void** voiddata)
 
   data->rwork = (double*) malloc((size)*sizeof(double));
   data->iwork = (int*) malloc(size*sizeof(int));
+  data->trans = 'N';
 
   /* damped newton */
   data->x_new = (double*) malloc((size+1)*sizeof(double));
@@ -366,7 +367,7 @@ void printErrors(double delta_x, double delta_x_scaled, double delta_f, double e
 int solveLinearSystem(int* n, int* iwork, double* fvec, double *fjac, DATA_NEWTON* solverData)
 {
   int i, nrsh=1, lapackinfo;
-  char trans = 'N';
+  char trans = solverData->trans;
 
   /* if no factorization is given, calculate it */
   if (solverData->factorization == 0)

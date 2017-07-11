@@ -1291,14 +1291,15 @@ algorithm
 
       // no dynamic tearing
       case (SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index, partOfMixed, vars, beqs, simJac, eqs, optSymJac, sources, sysIndex, _), NONE()))
-      then SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index, partOfMixed, vars, beqs, simJac, eqs, optSymJac, sources, sysIndex, outAdolcIndex), NONE());
+        equation
+           outAdolcIndex = outAdolcIndex+1;
+      then SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index, partOfMixed, vars, beqs, simJac, eqs, optSymJac, sources, sysIndex, outAdolcIndex-1), NONE());
 
       else
       then eq;
     end match;
     outEqns := syst::outEqns;
   end for;
-  outAdolcIndex := outAdolcIndex+1;
   outEqns := listReverse(outEqns);
 end setAdolcIndexLinSysts;
 

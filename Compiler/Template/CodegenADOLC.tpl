@@ -57,7 +57,7 @@ template createAdolcTrace(OperationData modelOperationData)
     <%assign_ind%>
     // operations
     <%operations%>
-    // define depenpendent
+    // define dependent
     <%assign_dep%>
     // death_not
     <%death_not%>

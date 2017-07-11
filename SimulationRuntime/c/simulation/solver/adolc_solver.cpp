@@ -311,24 +311,50 @@ int wrapper_fvec_newton_adolc(int* n, double* x, double* fvec, void* userdata, i
 	} else {
 		::fov_forward(nledf->trace1,*n,*n,*n,x,nledf->I2,fvec,nledf->J);
 	}
+	return 0;
 }
 
 NonLinearSolverEdf::NonLinearSolverEdf(const char* nlsfbase, short tagstart) : EDFobject_v2() {
-    char *nlsfilename1, *nlsfilename2, *nlsfilename3;
+    char *nlsfilename;
     size_t slen = strlen(nlsfbase);
-    nlsfilename1 = new char[slen + 10];
-    nlsfilename2 = new char[slen + 10];
-    nlsfilename3 = new char[slen + 10];
-    sprintf(nlsfilename1,"%s_1_aat.txt",nlsfbase);
-    sprintf(nlsfilename2,"%s_2_aat.txt",nlsfbase);
-    sprintf(nlsfilename3,"%s_3_aat.txt",nlsfbase);
+    nlsfilename = new char[slen + 15];
+
+    sprintf(nlsfilename,"%s_1_aat.txt",nlsfbase);
     trace1 = tagstart;
-    tagstart = read_ascii_trace(nlsfilename1,tagstart);
+    tagstart = read_ascii_trace(nlsfilename,tagstart);
+
+    /* //debug
+    sprintf(nlsfilename,"%s_1_aat_w.txt",nlsfbase);
+    write_ascii_trace(nlsfilename, trace1);
+    printf("tag 1: %d\n", trace1);
+    printTapeStats(stdout, trace1);
+     */
+
+    sprintf(nlsfilename,"%s_2_aat.txt",nlsfbase);
     trace2 = tagstart;
-    tagstart = read_ascii_trace(nlsfilename2,tagstart);
+    tagstart = read_ascii_trace(nlsfilename,tagstart);
+
+    /* //debug
+    sprintf(nlsfilename,"%s_2_aat_w.txt",nlsfbase);
+    write_ascii_trace(nlsfilename, trace2);
+    printf("tag 2: %d\n", trace2);
+    printTapeStats(stdout, trace2);
+    */
+
+    sprintf(nlsfilename,"%s_3_aat.txt",nlsfbase);
     trace3 = tagstart;
-    tagstart = read_ascii_trace(nlsfilename3,tagstart);
+    tagstart = read_ascii_trace(nlsfilename,tagstart);
     nexttag = tagstart;
+
+    /* //debug
+    sprintf(nlsfilename,"%s_3_aat_w.txt",nlsfbase);
+    write_ascii_trace(nlsfilename, trace3);
+    printf("tag 3: %d\n", trace3);
+    printTapeStats(stdout, trace3);
+    printf("next tag: %d\n", nexttag);
+    */
+
+    delete [] nlsfilename;
 }
 
 int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
@@ -405,7 +431,7 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     jacobian(trace1,outsz[1],outsz[1],y[1],J1);
     double **J3 = myalloc2(outsz[1],outsz[0]);
     set_param_vec(trace3, num_param1, allparams1);
-    jacobian(trace3,outsz[1],outsz[0],y[1],J3);
+    jacobian(trace3,outsz[0],outsz[1],y[1],J3);
     free(allparams1);
 
     // finally compute jacobian or resid,y1 wrt y2 after convergence in J
@@ -525,7 +551,7 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     jacobian(trace1,outsz[1],outsz[1],y[1],J1);
     double **J3 = myalloc2(outsz[1],outsz[0]);
     set_param_vec(trace3, num_param1, allparams1);
-    jacobian(trace3,outsz[1],outsz[0],y[1],J3);
+    jacobian(trace3,outsz[0],outsz[1],y[1],J3);
     free(allparams1);
 
     // finally compute jacobian or resid,y1 wrt y2 after convergence in J
@@ -629,9 +655,10 @@ unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny1, int ny2,short* 
     *usetag = edf.get_next_tag();
     edf.numIterVar = outsz[1];
     allocateNewtonData(edf.numIterVar,reinterpret_cast<void**>(&edf.data));
-	edf.tmp = (char*) malloc(edf.numIterVar * sizeof(double*));
-	populate_dpp_with_contigdata(&edf.J,edf.tmp,edf.numIterVar,edf.numIterVar,edf.data->fjac);
+    edf.tmp = (char*) malloc(edf.numIterVar * sizeof(double*));
+    populate_dpp_with_contigdata(&edf.J,edf.tmp,edf.numIterVar,edf.numIterVar,edf.data->fjac);
     edf.I2 = myallocI2(edf.numIterVar);
+    edf.data->trans = 'T';
     return edf.get_index();
 }
 

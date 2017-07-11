@@ -361,6 +361,7 @@ algorithm
 
     // create iterations variables
     crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.crefs);
+    crefExps := listReverse(crefExps);
     iterationSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
     iterationSimVars := SimCodeUtil.rewriteIndex(iterationSimVars, 0);
 
@@ -370,13 +371,14 @@ algorithm
     crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.inputCrefs);
     inputSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
     inputSimVars := List.map1(inputSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
-    inputSimVars := SimCodeUtil.rewriteIndex(inputSimVars, listLength(simVarParams)+1);
+    inputSimVars := SimCodeUtil.rewriteIndex(inputSimVars, listLength(simVarParams));
 
     localHT := List.fold(simVarParams, SimCodeUtil.addSimVarToHashTable, localHT);
     localHT := List.fold(inputSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
       
     // create residual variables    
     crefExps := list(Expression.crefToExp(cr) for cr in resCrefs);
+    crefExps := listReverse(crefExps);
     resSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
     resSimVars := SimCodeUtil.rewriteIndex(resSimVars, listLength(iterationSimVars));
     SimCodeUtil.dumpVarLst(resSimVars, "resSimVars");
@@ -399,7 +401,7 @@ algorithm
     optData := setInDepAndDepVars(iterationSimVars, resSimVars, optData);
     optData.numParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
     // set op data name
-    optData.name := modelName + "nls_" + intString(nlsSyst.adolcIndex) + "_1";
+    optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_1";
   
     outOperationData := optData::outOperationData;    
 
@@ -412,7 +414,7 @@ algorithm
     optData := setInDepAndDepVars(iterationSimVars, innerSimVars, optData);
     optData.numParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
     // set op data name
-    optData.name := modelName + "nls_" + intString(nlsSyst.adolcIndex) + "_3";
+    optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_3";
 
     outOperationData := optData::outOperationData;
 
@@ -429,7 +431,7 @@ algorithm
     
     // y -> params
     iterationSimVars := List.map1(iterationSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
-    iterationSimVars := SimCodeUtil.rewriteIndex(iterationSimVars, 1+listLength(simVarParams));
+    iterationSimVars := SimCodeUtil.rewriteIndex(iterationSimVars, listLength(simVarParams));
 
     localHT := List.fold(simVarParams, SimCodeUtil.addSimVarToHashTable, localHT);
     localHT := List.fold(iterationSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
@@ -450,7 +452,7 @@ algorithm
     optData := setInDepAndDepVars(inputSimVars, listAppend(resSimVars,innerSimVars), optData);
     optData.numParameters := 1+listLength(simVarParams)+listLength(iterationSimVars);
     // set op data name
-    optData.name := modelName + "nls_" + intString(nlsSyst.adolcIndex) + "_2";
+    optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_2";
   
     outOperationData := optData::outOperationData;   
   end for;
