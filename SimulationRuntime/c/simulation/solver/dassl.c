@@ -144,7 +144,7 @@ void initialize_linearSystems(DATA *data)
 		  if (outIdx != lsData[i].adolcIndex){
 			  errorStreamPrint(LOG_STDOUT, 0, "ADOLC Linear System Index does not match! %u != %ld", outIdx, lsData[i].adolcIndex);
 		  }
-		  infoStreamPrint(LOG_STDOUT, 0, "Adolc linear system outIndex %u", outIdx);
+		  infoStreamPrint(LOG_SOLVER_V, 0, "Adolc linear system outIndex %u", outIdx);
 		}
 	}
 }
@@ -164,7 +164,7 @@ void initialize_nonLinearSystems(DATA *data, short* usertag)
 		  if (outIdx != nlsData[i].adolcIndex){
 			  errorStreamPrint(LOG_STDOUT, 0, "ADOLC non-linear system index does not match! %u != %ld", outIdx, nlsData[i].adolcIndex);
 		  }
-		  infoStreamPrint(LOG_STDOUT, 0, "Adolc non-linear system outIndex %u", outIdx);
+		  infoStreamPrint(LOG_SOLVER_V, 0, "Adolc non-linear system outIndex %u", outIdx);
 		}
 	}
 }

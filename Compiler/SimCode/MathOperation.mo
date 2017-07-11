@@ -332,7 +332,7 @@ protected
   OperationData optData;
   list<Integer> tmpLst;
 
-  constant Boolean debug = true;
+  constant Boolean debug = false;
 algorithm
   // create OperationData for nls system
   for nlsSyst in nlsSysts loop
@@ -348,9 +348,15 @@ algorithm
 
     resCrefs := list( ComponentReference.makeCrefIdent("$res" + intString(i), DAE.T_REAL_DEFAULT, {})  for i in 1:listLength(nlsSyst.crefs));
     // add res cref to residuals-simEqs
-    SimCodeUtil.dumpSimEqSystemLst(nlsSyst.eqs, "\n");
+    if debug then
+      print("Original Non-Linear System: \n");
+      SimCodeUtil.dumpSimEqSystemLst(nlsSyst.eqs, "\n");
+    end if;
     nlsSyst.eqs := makeAssignEqFromResidualEqs(nlsSyst.eqs, resCrefs);
-    SimCodeUtil.dumpSimEqSystemLst(nlsSyst.eqs, "\n");
+    if debug then
+      print("Non-Linear System after transformation: \n");
+      SimCodeUtil.dumpSimEqSystemLst(nlsSyst.eqs, "\n");
+    end if;
 
     // create Trace 1
     //   time, p, x -> parameters
@@ -381,7 +387,9 @@ algorithm
     crefExps := listReverse(crefExps);
     resSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
     resSimVars := SimCodeUtil.rewriteIndex(resSimVars, listLength(iterationSimVars));
-    SimCodeUtil.dumpVarLst(resSimVars, "resSimVars");
+    if debug then
+      SimCodeUtil.dumpVarLst(resSimVars, "resSimVars");
+    end if;
     
     localHT := List.fold(resSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
@@ -568,13 +576,13 @@ algorithm
 
         // SIMPLE_ASSIGN
         case SimCode.SES_SIMPLE_ASSIGN(index=index, exp=exp, cref=cref) equation
-          print("collectOperationsForFuncArgs operation : " + ComponentReference.printComponentRefStr(cref) + " = " +  ExpressionDump.printExpStr(exp) +"\n");
+          //print("collectOperationsForFuncArgs operation : " + ComponentReference.printComponentRefStr(cref) + " = " +  ExpressionDump.printExpStr(exp) +"\n");
           simVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
           simVarOperand = OPERAND_VAR(simVar);
-          print("collectOperationsForFuncArgs assign : ");
+          //print("collectOperationsForFuncArgs assign : ");
           workingArgs.tmpIndex = workingArgs.numVariables;
           ({assignOperand}, operations, workingArgs) = collectOperationsForExp(exp, operations, workingArgs);
-          print("Done with collectOperationsForExp\n");
+          //print("Done with collectOperationsForExp\n");
           if isTmpOperand(assignOperand) then
             op::rest = operations;
             op = replaceOperationResult(op, simVarOperand);
@@ -583,7 +591,7 @@ algorithm
             op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
             operations = op::operations;
           end if;
-          print("collectOperationsForFuncArgs operation : " +  printOperationStr(op) +"\n");
+          //print("collectOperationsForFuncArgs operation : " +  printOperationStr(op) +"\n");
         then ();
 
         case SimCode.SES_RESIDUAL() equation
@@ -942,7 +950,7 @@ algorithm
       Absyn.Ident ident;
       Absyn.Path path;
       WorkingStateArgs workingArgs;
-      constant Boolean debug = true;
+      constant Boolean debug = false;
 
     // ICONST
     case (e1 as DAE.ICONST(), (opds, ops, workingArgs)) equation
