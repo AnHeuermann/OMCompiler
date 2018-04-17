@@ -971,6 +971,19 @@ algorithm
       opds = OPERAND_VAR(resVar)::opds;
     then (inExp, (opds, ops, workingArgs));
 
+    // CALL, start
+    case (DAE.CREF(componentRef=DAE.CREF_QUAL(ident="$START",componentRef=cref),ty=ty), (opds, ops, workingArgs))
+    equation
+      opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
+      // Start var
+      paramVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      workingArgs.tmpIndex = tmpIndex;
+      operation = OPERATION({OPERAND_INDEX(paramVar.index+(workingArgs.numParameters+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
+      ops = operation::ops;
+      opds = OPERAND_VAR(resVar)::opds;
+    then (inExp, (opds, ops, workingArgs));
+
     // CREF, ty
     case (DAE.CREF(componentRef=cref, ty=ty), (opds, ops, workingArgs)) equation
       paramVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
@@ -1222,19 +1235,6 @@ algorithm
       operation = OPERATION({opd1,OPERAND_VAR(paramVar)}, UNARY_CALL(ident), result);
       ops = operation::ops;
     then (inExp, (result::rest, ops, workingArgs));
-
-    // CALL, start
-    case (DAE.CALL(path=Absyn.IDENT("$_start"), expLst={e1 as DAE.CREF(componentRef=cref)}, attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs))
-    equation
-      _::opds = opds;
-      // Start var
-      paramVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
-      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
-      workingArgs.tmpIndex = tmpIndex;
-      operation = OPERATION({OPERAND_INDEX(paramVar.index+(workingArgs.numParameters+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
-      ops = operation::ops;
-      opds = OPERAND_VAR(resVar)::opds;
-    then (inExp, (opds, ops, workingArgs));
 
     // Modelica functions
     // CALL

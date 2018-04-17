@@ -230,6 +230,8 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
 
   data->simulationInfo->currentContext = CONTEXT_ALGEBRAIC;
 
+  dasslData->useAdolc = 0;
+
   /* ### start configuration of dassl ### */
   infoStreamPrint(LOG_SOLVER, 1, "Configuration of the dassl code:");
 
@@ -405,6 +407,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       dasslData->jacobianFunction =  jacA_num;
       break;
     case ADOLC:
+      dasslData->useAdolc = 1;
       /* alloc adolc */
       data->simulationInfo->adolcTag = 0;
 
@@ -414,7 +417,6 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       }
       dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal)*sizeof(double));
-      memcpy(dasslData->adolcParam+1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
 
       // allocate memory for linear systems
       initialize_linearSystems(data);
@@ -438,6 +440,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       }
       break;
     case ADOLCSPARSE:
+      dasslData->useAdolc = 1;
       if(measure_time_flag)
       {
         rt_tick(SIM_TIMER_ADOLC_INIT);
@@ -604,6 +607,7 @@ int dassl_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
   int retVal = 0;
   int saveJumpState;
   static unsigned int dasslStepsOutputCounter = 1;
+  static int initialParamCopy = 1;
 
   DASSL_DATA *dasslData = (DASSL_DATA*) solverInfo->solverData;
 
@@ -626,6 +630,11 @@ int dassl_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
 
   saveJumpState = threadData->currentErrorStage;
   threadData->currentErrorStage = ERROR_INTEGRATOR;
+
+  if (initialParamCopy && dasslData->useAdolc){
+    memcpy(dasslData->adolcParam+1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
+    initialParamCopy = 0;
+  }
 
   /* try */
 #if !defined(OMC_EMCC)
@@ -1284,7 +1293,6 @@ static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, d
 
   /* the first argument is the same number as in function name after system */
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
-
   updateTimeParamLoc(dasslData->adolcParam, *t);
   set_param_vec(data->simulationInfo->adolcTag, data->modelData->nParametersReal+1 , dasslData->adolcParam);
   printCurrentStatesVector(LOG_JAC, y, data, *t);

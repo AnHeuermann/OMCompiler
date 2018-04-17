@@ -75,6 +75,7 @@ typedef struct DASSL_DATA{
 
   double** adolcJac;
   double* adolcParam;
+  int useAdolc;
 
   /* function pointer of provied functions */
   int (*residualFunction)(double *t, double *x, double *xprime, double *cj, double *delta, int *ires, double *rpar, int* ipar);

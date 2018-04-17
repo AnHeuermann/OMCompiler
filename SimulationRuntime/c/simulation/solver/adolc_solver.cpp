@@ -549,7 +549,7 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     }
     double **J1 = myalloc2(outsz[1],outsz[1]);
     jacobian(trace1,outsz[1],outsz[1],y[1],J1);
-    double **J3 = myalloc2(outsz[1],outsz[0]);
+    double **J3 = myalloc2(outsz[0],outsz[1]);
     set_param_vec(trace3, num_param1, allparams1);
     jacobian(trace3,outsz[0],outsz[1],y[1],J3);
     free(allparams1);
@@ -562,6 +562,8 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     int num_param2 = stats2[NUM_PARAM]; // should be numouterparams
     double* allparams2 = (double*) calloc(num_param2,sizeof(double));
     double* depen = (double*) calloc(num_depen2,sizeof(double));
+    printf("numdepen2 = %d depen= 0x%x\n", num_depen2, depen);
+    printf("outsz[0] = %d outsz[1]= %d\n", outsz[0], outsz[1]);
     for (i = 0; i < numouterparams; i++)
         allparams2[i] = outerparams[i];
     for (i = 0; i < outsz[0]; i++)
@@ -574,6 +576,8 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     for (i=0;i<outsz[0];i++) {
         	y[0][i] = depen[outsz[1]+i];
     }
+    printf("numdepen2 = %d depen= 0x%x\n", num_depen2, depen);
+    printf("outsz[0] = %d outsz[1]= %d\n", outsz[0], outsz[1]);
     free(depen);
     // First outsz[1] rows of J2 contain dr/dx, next outsz[0] rows contain dy1/dx
     // solve yp[1] = - J1^{-1} * dr/dx using a linear solver
