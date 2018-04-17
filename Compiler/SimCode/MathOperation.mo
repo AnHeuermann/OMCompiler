@@ -482,7 +482,7 @@ algorithm
         DAE.ComponentRef cref;
       case SimCode.SES_RESIDUAL(index=index, exp=exp, source=source) equation
         cref::rest = rest;        
-      then SimCode.SES_SIMPLE_ASSIGN(index, cref, exp, source)::outEqns;
+      then SimCode.SES_SIMPLE_ASSIGN(index, cref, exp, source, BackendDAE.EQ_ATTR_DEFAULT_UNKNOWN)::outEqns;
       else eq::outEqns;
     end match;
   end for;
@@ -683,7 +683,7 @@ algorithm
           i := 0;
 
           for exp in expLst loop
-            (assignOperand, operations, workingArgs) := collectOperationsForExp(exp, operations, workingArgs);
+            ({assignOperand}, operations, workingArgs) := collectOperationsForExp(exp, operations, workingArgs);
             simVarOperand := OPERAND_INDEX(indexB + i);
             if isTmpOperand(assignOperand) then
               op::rest := operations;
@@ -709,7 +709,7 @@ algorithm
           for tpl in simJac loop
             (row,col,SimCode.SES_RESIDUAL(exp=exp)) := tpl;
             intOpds := OPERAND_INDEX(col)::OPERAND_INDEX(row)::intOpds;
-            (assignOperand, operations, workingArgs) := collectOperationsForExp(exp, operations, workingArgs);
+            ({assignOperand}, operations, workingArgs) := collectOperationsForExp(exp, operations, workingArgs);
             simVarOperand := OPERAND_INDEX(indexA + i);
 
             if isTmpOperand(assignOperand) then
@@ -1783,7 +1783,7 @@ algorithm
     case COND_EQ_ASSIGN()
     then "cond_eq_assign";
 
-    case EXT_DIFF_V2()
+    case EXT_DIFF_V()
     then "ext_diff_v";
   end match;
 end printOperatorStr;

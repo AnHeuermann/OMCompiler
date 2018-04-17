@@ -1350,7 +1350,8 @@ algorithm
                               SimCode.emptyPartitionData,
                               daeModeData,
                               {},
-                              NONE()
+                              NONE(),
+                              {}
                               );
 
     (simCode, (_, _, lits)) := SimCodeUtil.traverseExpsSimCode(simCode, SimCodeFunctionUtil.findLiteralsHelper, literals);

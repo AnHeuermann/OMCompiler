@@ -510,9 +510,6 @@ ida_solver_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo
     case COLOREDNUMJAC:
       flag = IDASlsSetSparseJacFn(idaData->ida_mem, callSparseJacobian);
       break;
-    case COLOREDSYMJAC:
-      flag = IDASlsSetSparseJacFn(idaData->ida_mem, jacobianSymbolicColored);
-      break;
     case ADOLCSPARSE:
 
       if(measure_time_flag)

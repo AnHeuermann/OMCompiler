@@ -1288,12 +1288,15 @@ algorithm
         list<tuple<Integer, Integer, SimCode.SimEqSystem>> simJac;
         list<DAE.ElementSource> sources;
         list<SimCode.SimEqSystem> eqs;
+        Integer nUnknowns;
+        Boolean tornSystem;
+        BackendDAE.EquationAttributes eqAttr;
 
       // no dynamic tearing
-      case (SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index, partOfMixed, vars, beqs, simJac, eqs, optSymJac, sources, sysIndex, _), NONE()))
+      case (SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index, partOfMixed, tornSystem, vars, beqs, simJac, eqs, optSymJac, sources, sysIndex, nUnknowns, _), NONE(), eqAttr))
         equation
            outAdolcIndex = outAdolcIndex+1;
-      then SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index, partOfMixed, vars, beqs, simJac, eqs, optSymJac, sources, sysIndex, outAdolcIndex-1), NONE());
+      then SimCode.SES_LINEAR(SimCode.LINEARSYSTEM(index, partOfMixed, tornSystem, vars, beqs, simJac, eqs, optSymJac, sources, sysIndex, nUnknowns, outAdolcIndex-1), NONE(), eqAttr);
 
       else
       then eq;
@@ -1321,10 +1324,13 @@ algorithm
         Option<SimCode.JacobianMatrix> optSymJac;
         Boolean homotopySupport;
         Boolean mixedSystem;
+        Boolean tornSystem;
+        Integer nUnknowns;
+        BackendDAE.EquationAttributes eqAttr;
 
       // no dynamic tearing
-      case (SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs, inputCrefs, sysIndex, optSymJac, homotopySupport, mixedSystem, _), NONE()))
-      then SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs, inputCrefs, sysIndex, optSymJac, homotopySupport, mixedSystem, outAdolcIndex), NONE());
+      case (SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs, inputCrefs, sysIndex, nUnknowns, optSymJac, homotopySupport, mixedSystem, tornSystem, _), NONE(), eqAttr))
+      then SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs, inputCrefs, sysIndex, nUnknowns, optSymJac, homotopySupport, mixedSystem, tornSystem, outAdolcIndex), NONE(), eqAttr);
 
       else
       then eq;
@@ -3516,7 +3522,7 @@ algorithm
       // create symbolic jacobian for simulation
       (jacobianMatrix, uniqueEqIndex, tempvars) = createSymbolicSimulationJacobian(inJacobian, uniqueEqIndex, tempvars);
       (_, homotopySupport) = BackendEquation.traverseExpsOfEquationList(eqn_lst, BackendDAEUtil.containsHomotopyCall, false);
-    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, {}, inputsCrefs, 0, inVars.numberOfVars+listLength(tempvars)-listLength(itempvars), jacobianMatrix, homotopySupport, mixedSystem, false, -1), NONE(), BackendDAE.EQ_ATTR_DEFAULT_UNKNOWN)}, uniqueEqIndex+1, tempvars);
+    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, {}, inputCrefs, 0, inVars.numberOfVars+listLength(tempvars)-listLength(itempvars), jacobianMatrix, homotopySupport, mixedSystem, false, -1), NONE(), BackendDAE.EQ_ATTR_DEFAULT_UNKNOWN)}, uniqueEqIndex+1, tempvars);
 
     // No analytic jacobian available. Generate non-linear system.
     case (_, _) equation
@@ -3747,8 +3753,11 @@ algorithm
        SimCode.NonlinearSystem nlSystem;
        Option<SimCode.LinearSystem> alternativeTearingL;
        Option<SimCode.NonlinearSystem> alternativeTearingNl;
-       BackendDAE.BackendDAEType backendDAEType;
        Boolean partOfJac;
+       list<DAE.ComponentRef> tcrs, innerCrefs, inputCrefs;
+       list<Integer> otherVarsInts;
+       list<list<Integer>> otherVarsIntsLst;
+       list<BackendDAE.Var> ovarsLst;
 
      // CASE: linear
      case(true, BackendDAE.EQSYSTEM(orderedVars=vars, orderedEqs=eqns), BackendDAE.SHARED(globalKnownVars=globalKnownVars)) equation
@@ -3796,7 +3805,7 @@ algorithm
          simequations = listAppend(simequations, resEqs);
 
          (jacobianMatrix, uniqueEqIndex, tempvars2) = createSymbolicSimulationJacobian(inJacobian, uniqueEqIndex, tempvars2);
-         alternativeTearingL = SOME(SimCode.LINEARSYSTEM(uniqueEqIndex, false, true, simVars, {}, {}, simequations, jacobianMatrix, {}, 0, listLength(tvars)+nInnerVars+listLength(tempvars2)-listLength(tempvars)), partOfJac, -1);
+         alternativeTearingL = SOME(SimCode.LINEARSYSTEM(uniqueEqIndex, false, true, simVars, {}, {}, simequations, jacobianMatrix, {}, 0, listLength(tvars)+nInnerVars+listLength(tempvars2)-listLength(tempvars), partOfJac, -1));
 
        else
          alternativeTearingL = NONE();
@@ -3855,14 +3864,14 @@ algorithm
          (resEqs, uniqueEqIndex, tempvars2) = createNonlinearResidualEquations(reqns, uniqueEqIndex, tempvars2, ishared.functionTree);
          simequations = listAppend(simequations, resEqs);
 
-	       //generate dependend vars and independend
-	       (_, otherVarsIntsLst, _) = List.map_3(innerEquations, BackendDAEUtil.getEqnAndVarsFromInnerEquation);
-	       otherVarsInts = List.flatten(otherVarsIntsLst);
-	       ovarsLst = List.map1r(otherVarsInts, BackendVariable.getVarAt, vars);
-	       ovarsLst = List.map(ovarsLst, BackendVariable.transformXToXd);
-	       innerCrefs = List.map(ovarsLst, BackendVariable.varCref);
-	
-	       (_, (inputCrefs, _, _)) = traverseExpsEqSystems(simequations, collectInputVars, ({}, listAppend(tcrs, innerCrefs), vars), {});
+         //generate dependend vars and independend
+         (_, otherVarsIntsLst, _) = List.map_3(innerEquations, BackendDAEUtil.getEqnAndVarsFromInnerEquation);
+         otherVarsInts = List.flatten(otherVarsIntsLst);
+         ovarsLst = List.map1r(otherVarsInts, BackendVariable.getVarAt, vars);
+         ovarsLst = List.map(ovarsLst, BackendVariable.transformXToXd);
+         innerCrefs = List.map(ovarsLst, BackendVariable.varCref);
+
+         (_, (inputCrefs, _, _)) = traverseExpsEqSystems(simequations, collectInputVars, ({}, listAppend(tcrs, innerCrefs), vars), {});
 
          (jacobianMatrix, uniqueEqIndex, tempvars2) = createSymbolicSimulationJacobian(inJacobian, uniqueEqIndex, tempvars2);
          if not homotopySupport then
@@ -5394,12 +5403,13 @@ algorithm
   simVar.matrixName := optName;
 end setSimVarMatrixName;
 
-protected function makeTmpRealSimCodeVar
+public function makeTmpRealSimCodeVar
   input DAE.ComponentRef inName;
   input BackendDAE.VarKind inVarKind;
+  input Integer index = -1; /* use -1 to get an error in simulation if something failed */
   output SimCodeVar.SimVar outSimVar;
 algorithm
-  outSimVar := SimCodeVar.SIMVAR(inName, inVarKind, "", "", "", -1 /* use -1 to get an error in simulation if something failed */,
+  outSimVar := SimCodeVar.SIMVAR(inName, inVarKind, "", "", "", index,
         NONE(), NONE(), NONE(), NONE(), false, DAE.T_REAL_DEFAULT,
         false, NONE(), SimCodeVar.NOALIAS(), DAE.emptyElementSource,
         SimCodeVar.NONECAUS(), NONE(), {}, false, false, false, NONE(), NONE());
@@ -6300,7 +6310,7 @@ algorithm
       // Create nonlinear equation system from complex function
       (resEqs, uniqueEqIndex, tempvars, crefs) = createNonlinearResidualEquationsSingleComplex(e1, e2, source, eqAttr, iuniqueEqIndex, itempvars, crefs);
       (_, homotopySupport) = BackendEquation.traverseExpsOfEquation(inEquation, BackendDAEUtil.containsHomotopyCall, false);
-    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, 0, listLength(inVars)+listLength(tempvars)-listLength(itempvars), NONE(), homotopySupport, false, false), NONE(), eqAttr)}, uniqueEqIndex+1, tempvars);
+    then ({SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(uniqueEqIndex, resEqs, crefs, {}, {}, 0, listLength(inVars)+listLength(tempvars)-listLength(itempvars), NONE(), homotopySupport, false, false, -1), NONE(), eqAttr)}, uniqueEqIndex+1, tempvars);
 
     case (BackendDAE.COMPLEX_EQUATION(attr=eqAttr), _, _, _) equation
       crefs = List.map(inVars, BackendVariable.varCref);
@@ -12641,18 +12651,6 @@ author:Waurich TUD 2014-05"
 algorithm
   simVarOut.index := idx;
 end replaceSimVarIndex;
-
-public function makeTmpRealSimCodeVar
-  input DAE.ComponentRef inName;
-  input BackendDAE.VarKind inVarKind;
-  input Integer index = -1;
-  output SimCodeVar.SimVar outSimVar;
-algorithm
-  outSimVar := SimCodeVar.SIMVAR(inName, inVarKind, "", "", "", index,
-      NONE(), NONE(), NONE(), NONE(), false, DAE.T_REAL_DEFAULT,
-      false, NONE(), SimCodeVar.NOALIAS(), DAE.emptyElementSource,
-      SimCodeVar.NONECAUS(), NONE(), {}, false, false, false, NONE());
-end makeTmpRealSimCodeVar;
 
 public function addSimVarToAlgVars
   input SimCodeVar.SimVar simVar;
