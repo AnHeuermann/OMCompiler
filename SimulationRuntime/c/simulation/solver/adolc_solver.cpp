@@ -559,14 +559,12 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     tapestats(trace2, stats2);
     int num_depen2 = stats2[NUM_DEPENDENTS];// should be == outsz[0] + outsz[1]
     int num_indep2 = stats2[NUM_INDEPENDENTS]; // should be == insz[0]
-    int num_param2 = stats2[NUM_PARAM]; // should be numouterparams
+    int num_param2 = stats2[NUM_PARAM]; // should be numouterparams + outsz[1]
     double* allparams2 = (double*) calloc(num_param2,sizeof(double));
     double* depen = (double*) calloc(num_depen2,sizeof(double));
-    printf("numdepen2 = %d depen= 0x%x\n", num_depen2, depen);
-    printf("outsz[0] = %d outsz[1]= %d\n", outsz[0], outsz[1]);
     for (i = 0; i < numouterparams; i++)
         allparams2[i] = outerparams[i];
-    for (i = 0; i < outsz[0]; i++)
+    for (i = 0; i < outsz[1]; i++)
         allparams2[numouterparams+i] = y[1][i];
     set_param_vec(trace2, num_param2, allparams2);
     // use fov_forward for computing j2 instead
@@ -576,8 +574,6 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     for (i=0;i<outsz[0];i++) {
         	y[0][i] = depen[outsz[1]+i];
     }
-    printf("numdepen2 = %d depen= 0x%x\n", num_depen2, depen);
-    printf("outsz[0] = %d outsz[1]= %d\n", outsz[0], outsz[1]);
     free(depen);
     // First outsz[1] rows of J2 contain dr/dx, next outsz[0] rows contain dy1/dx
     // solve yp[1] = - J1^{-1} * dr/dx using a linear solver
