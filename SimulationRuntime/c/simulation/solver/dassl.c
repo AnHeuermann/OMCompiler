@@ -441,6 +441,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       break;
     case ADOLCSPARSE:
       dasslData->useAdolc = 1;
+      data->simulationInfo->adolcTag = 0;
       if(measure_time_flag)
       {
         rt_tick(SIM_TIMER_ADOLC_INIT);
@@ -448,11 +449,14 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal)*sizeof(double));
       memcpy(dasslData->adolcParam +1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
+      // allocate memory for linear systems
       initialize_linearSystems(data);
+      // allocate memory for non-linear systems
+      initialize_nonLinearSystems(data, &data->simulationInfo->adolcTag );
 
       sprintf(filename, "%s_aat.txt", data->modelData->modelFilePrefix);
       //sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
-      read_ascii_trace(filename, 0);
+      read_ascii_trace(filename, data->simulationInfo->adolcTag);
       //tapestats(0,stats);
       //dasslData->adolc_num_params = stats[NUM_PARAM];
       //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
@@ -1353,13 +1357,13 @@ static int JacobianADOLCSparse(double *t, double *y, double *yprime, double *del
   /* the first argument is the same number as in function name after system */
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
   updateTimeParamLoc(dasslData->adolcParam, *t);
-  set_param_vec(0, data->modelData->nParametersReal+1 , dasslData->adolcParam);
+  set_param_vec(data->simulationInfo->adolcTag, data->modelData->nParametersReal+1 , dasslData->adolcParam);
   printCurrentStatesVector(LOG_JAC, y, data, *t);
   if(measure_time_flag)
   {
     rt_tick(SIM_TIMER_JACOBIAN);
   }
-  sparse_jac(0, dasslData->N, dasslData->N, repeat, y, &nnz,
+  sparse_jac(data->simulationInfo->adolcTag, dasslData->N, dasslData->N, repeat, y, &nnz,
              &rows, &cols, &values, options);
   if(measure_time_flag)
   {

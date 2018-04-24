@@ -386,7 +386,7 @@ int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int 
     	y[1][i] = data->x[i];
     }
     set_param_vec(trace3, num_param1, allparams1);
-    ::zos_forward(trace3,outsz[1],outsz[0],0,y[1],y[0]);
+    ::zos_forward(trace3,outsz[0],outsz[1],0,y[1],y[0]);
     free(allparams1);
     free(outerparams);
     return 0;
@@ -429,7 +429,7 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     }
     double **J1 = myalloc2(outsz[1],outsz[1]);
     jacobian(trace1,outsz[1],outsz[1],y[1],J1);
-    double **J3 = myalloc2(outsz[1],outsz[0]);
+    double **J3 = myalloc2(outsz[0],outsz[1]);
     set_param_vec(trace3, num_param1, allparams1);
     jacobian(trace3,outsz[0],outsz[1],y[1],J3);
     free(allparams1);
