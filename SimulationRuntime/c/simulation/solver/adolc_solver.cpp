@@ -444,7 +444,7 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     double* depen = (double*) calloc(num_depen2,sizeof(double));
     for (i = 0; i < numouterparams; i++)
         allparams2[i] = outerparams[i];
-    for (i = 0; i < outsz[0]; i++)
+    for (i = 0; i < outsz[1]; i++)
         allparams2[numouterparams+i] = y[1][i];
     set_param_vec(trace2, num_param2, allparams2);
     // allocate J2 as directional deriv of resid w.r.t. x
