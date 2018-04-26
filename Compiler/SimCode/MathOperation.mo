@@ -897,12 +897,16 @@ protected
   Operand assignOperand, simVarOperand ;
   Operation op;
   Boolean first = true;
+  list<Operand> tmpOpds;
 algorithm
   argsIndex := workingArgs.tmpIndex;
   workingArgs.tmpIndex := workingArgs.tmpIndex + listLength(inExpLst);
+  tmpOpds := listReverse(List.firstN(outOpds, listLength(inExpLst)));
+  outOpds := List.stripN(outOpds, listLength(inExpLst));
+
 
   for exp in inExpLst loop
-    assignOperand::outOpds := outOpds;
+    assignOperand::tmpOpds := tmpOpds;
     (simVar, argsIndex) := createSimTmpVar(argsIndex, Expression.typeof(exp));
     simVarOperand := OPERAND_VAR(simVar);
     op := OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
