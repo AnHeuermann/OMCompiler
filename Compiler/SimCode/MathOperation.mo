@@ -526,6 +526,7 @@ algorithm
     then ();
     end match;
   end for;
+  simVars := listReverse(simVars);
 end createSimVarsFromElements;
 
 protected function createOperationsForFunction
