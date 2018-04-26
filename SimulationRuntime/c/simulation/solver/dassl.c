@@ -521,11 +521,6 @@ int dassl_deinitial(DASSL_DATA *dasslData)
 {
   TRACE_PUSH
   unsigned int i;
-  if(measure_time_flag)
-  {
-    rt_accumulate(SIM_TIMER_ADOLC_INIT);
-    fprintf(stderr, "Time to calc jacobian: %f\n", rt_accumulated(SIM_TIMER_JACOBIAN));
-  }
 
   /* free work arrays for DASSL */
   free(dasslData->rwork);
@@ -1299,19 +1294,10 @@ static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, d
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
   updateTimeParamLoc(dasslData->adolcParam, *t);
   set_param_vec(data->simulationInfo->adolcTag, data->modelData->nParametersReal+1 , dasslData->adolcParam);
-  printCurrentStatesVector(LOG_JAC, y, data, *t);
-  if(measure_time_flag)
-  {
-    rt_tick(SIM_TIMER_JACOBIAN);
-  }
+
   //printTapeStats(stderr, data->simulationInfo->adolcTag);
   jacobian(data->simulationInfo->adolcTag, dasslData->N, dasslData->N, y, dasslData->adolcJac);
-  if(measure_time_flag)
-  {
-    rt_accumulate(SIM_TIMER_JACOBIAN);
-  }
 
-  /* add cj to diagonal elements and store in pd */
   k = 0;
   l = 0;
   for(i = 0; i < dasslData->N; i++)
@@ -1320,16 +1306,6 @@ static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, d
     {
       pd[k] = dasslData->adolcJac[j][i];
     }
-    pd[l] -= (double) *cj;
-    l += dasslData->N + 1;
-  }
-
-  /* debug */
-  if (ACTIVE_STREAM(LOG_JAC)){
-    //print("Jac: ", dasslData->N, dasslData->N, dasslData->jac_states);
-    _omc_matrix* dumpJac = _omc_createMatrix(dasslData->N, dasslData->N, pd);
-    _omc_printMatrix(dumpJac, "DASSL-Solver with ADOLC Matrix ", LOG_JAC);
-    _omc_destroyMatrix(dumpJac);
   }
 
   TRACE_POP
@@ -1358,17 +1334,9 @@ static int JacobianADOLCSparse(double *t, double *y, double *yprime, double *del
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
   updateTimeParamLoc(dasslData->adolcParam, *t);
   set_param_vec(data->simulationInfo->adolcTag, data->modelData->nParametersReal+1 , dasslData->adolcParam);
-  printCurrentStatesVector(LOG_JAC, y, data, *t);
-  if(measure_time_flag)
-  {
-    rt_tick(SIM_TIMER_JACOBIAN);
-  }
+
   sparse_jac(data->simulationInfo->adolcTag, dasslData->N, dasslData->N, repeat, y, &nnz,
              &rows, &cols, &values, options);
-  if(measure_time_flag)
-  {
-    rt_accumulate(SIM_TIMER_JACOBIAN);
-  }
 
   if (!repeat)
   {
@@ -1378,21 +1346,6 @@ static int JacobianADOLCSparse(double *t, double *y, double *yprime, double *del
   for(i = 0; i < nnz; i++)
   {
     pd[cols[i]*dasslData->N+rows[i]] = values[i];
-  }
-
-  /* add cj to diagonal elements and store in pd */
-  for(i = 0, j = 0; i < dasslData->N; i++)
-  {
-    pd[j] -= (double) *cj;
-    j += dasslData->N + 1;
-  }
-
-  /* debug */
-  if (ACTIVE_STREAM(LOG_JAC)){
-    //print("Jac: ", dasslData->N, dasslData->N, dasslData->jac_states);
-    _omc_matrix* dumpJac = _omc_createMatrix(dasslData->N, dasslData->N, pd);
-    _omc_printMatrix(dumpJac, "DASSL-Solver with ADOLC Matrix ", LOG_JAC);
-    _omc_destroyMatrix(dumpJac);
   }
 
   TRACE_POP
