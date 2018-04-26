@@ -378,6 +378,11 @@ algorithm
     inputSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
     inputSimVars := List.map1(inputSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
     inputSimVars := SimCodeUtil.rewriteIndex(inputSimVars, listLength(simVarParams));
+    if debug then
+      SimCodeUtil.dumpVarLst(inputSimVars, "inputs SimVars");
+      SimCodeUtil.dumpVarLst(simVarParams, "parameters SimVars");
+    end if;
+
 
     localHT := List.fold(simVarParams, SimCodeUtil.addSimVarToHashTable, localHT);
     localHT := List.fold(inputSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
@@ -397,6 +402,10 @@ algorithm
     crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.innerCrefs);
     innerSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
     innerSimVars := SimCodeUtil.rewriteIndex(innerSimVars, listLength(iterationSimVars)+listLength(resSimVars));
+    if debug then
+      SimCodeUtil.dumpVarLst(innerSimVars, "inner SimVars");
+    end if;
+
 
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
@@ -643,7 +652,7 @@ algorithm
           
           indexX := workingArgs.tmpIndex;
           i := 0;
-          for cr in inputCrefs loop
+          for cr in listReverse(inputCrefs) loop
             simVar := BaseHashTable.get(cr, workingArgs.crefToSimVarHT);
             op := OPERATION({OPERAND_VAR(simVar)}, ASSIGN_ACTIVE(), OPERAND_INDEX(indexX+i));
             operations := op::operations;
@@ -663,7 +672,7 @@ algorithm
           operations := op::operations;
 
           i := 0;
-          for cr in listAppend(innerCrefs, crefs) loop
+          for cr in listAppend(listReverse(innerCrefs), listReverse(crefs)) loop
             simVar := BaseHashTable.get(cr, workingArgs.crefToSimVarHT);
             op := OPERATION({OPERAND_INDEX(workingArgs.tmpIndex+i)}, ASSIGN_ACTIVE(), OPERAND_VAR(simVar));
             operations := op::operations;
