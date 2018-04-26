@@ -360,8 +360,8 @@ NonLinearSolverEdf::NonLinearSolverEdf(const char* nlsfbase, short tagstart) : E
 int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
     // assumption: nin == 1, nout == 2
     //             insz[0] == sizeof input vars x
-    //             outsz[0] == sizeof output vars y1
-    //             outsz[1] == sizeof output vars y2
+    //             outsz[0] == sizeof output vars y0
+    //             outsz[1] == sizeof output vars y1
     int numouterparams, i;
     double *outerparams;
     numouterparams = alloc_copy_current_params(&outerparams);
@@ -522,12 +522,12 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     // do everything as in function
     // assumption: nin == 1, nout == 2
     //             insz[0] == sizeof input vars x
-    //             outsz[0] == sizeof output vars y1
-    //             outsz[1] == sizeof output vars y2
+    //             outsz[0] == sizeof output vars y0
+    //             outsz[1] == sizeof output vars y1
     int numouterparams, i;
     double *outerparams;
     numouterparams = alloc_copy_current_params(&outerparams);
-    // solver takes input from x, jacobian from trace1 and gives output y2
+    // solver takes input from x, jacobian from trace1 and gives output y1
     size_t stats1[STAT_SIZE];
     tapestats(trace1, stats1);
     int num_resid1 = stats1[NUM_DEPENDENTS];
@@ -549,12 +549,14 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     }
     double **J1 = myalloc2(outsz[1],outsz[1]);
     jacobian(trace1,outsz[1],outsz[1],y[1],J1);
+    // J1 = partial deriv dr/dy1
     double **J3 = myalloc2(outsz[0],outsz[1]);
     set_param_vec(trace3, num_param1, allparams1);
     jacobian(trace3,outsz[0],outsz[1],y[1],J3);
+    // J3 = partial deriv dy0/dy1
     free(allparams1);
 
-    // finally compute jacobian or resid,y1 wrt y2 after convergence in J
+    // finally compute jacobian or resid,y0 wrt x after convergence in J2
     size_t stats2[STAT_SIZE];
     tapestats(trace2, stats2);
     int num_depen2 = stats2[NUM_DEPENDENTS];// should be == outsz[0] + outsz[1]
@@ -568,14 +570,15 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
         allparams2[numouterparams+i] = y[1][i];
     set_param_vec(trace2, num_param2, allparams2);
     // use fov_forward for computing j2 instead
-    // allocate J2 as directional deriv of resid w.r.t. x
+    // allocate J2 as directional deriv of resid,y0 w.r.t. x
     double **J2 = myalloc2(num_depen2,ndir);
     ::fov_forward(trace2, num_depen2, num_indep2, ndir, x[0], Xp[0], depen, J2);
     for (i=0;i<outsz[0];i++) {
         	y[0][i] = depen[outsz[1]+i];
     }
     free(depen);
-    // First outsz[1] rows of J2 contain dr/dx, next outsz[0] rows contain dy1/dx
+    // First outsz[1] rows of J2 contain partial deriv dr/dx, next outsz[0] rows
+    // contain partial deriv dy0/dx
     // solve yp[1] = - J1^{-1} * dr/dx using a linear solver
 
     int nrhs = ndir;
@@ -622,6 +625,24 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     myfree2(J2);
     free(outerparams);
     free(allparams2);
+/*
+    for(int i=0; i < nin; i++){
+      for(int k=0; k < insz[i]; k++){
+        printf("%d %d dp_x %lf\n", i, k, x[i][k]);
+		for(int j=0; j<ndir; j++){
+		  printf("[%d,%d,%d] %lf\n", i, k, j, Xp[i][k][j]);
+		}
+      }
+    }
+    for(int i=0; i < nout; i++){
+      for(int k=0; k < outsz[i]; k++){
+        printf("%d %d dp_x %lf\n", i, k, y[i][k]);
+		for(int j=0; j<ndir; j++){
+		  printf("[%d,%d,%d] %lf\n", i, k, j, Yp[i][k][j]);
+		}
+      }
+    }
+*/
     return 0;
 }
 
