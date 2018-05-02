@@ -41,7 +41,18 @@
 #include <adolc/drivers/drivers.h>
 #include <adolc/tapedoc/asciitapes.h>
 
+#include "omc_config.h"
+#include "util/omc_error.h"
+
 #include "simulation/solver/adolc_solver.h"
+
+#ifdef WITH_UMFPACK
+#include "suitesparse/Include/amd.h"
+#include "suitesparse/Include/umfpack.h"
+#include "suitesparse/Include/klu.h"
+#else
+#warning "UMFPACK not being used"
+#endif
 
 extern "C" {
 
@@ -63,9 +74,40 @@ int dgemm_(char* transa, char* transb, int* m, int* n, int* k, double* alpha,
 }
 
 class LinearSolverEdf : public EDFobject_v2 {
+#ifdef WITH_UMFPACK
+protected:
+    klu_symbolic *symbolic;
+    klu_numeric *numeric;
+    klu_common common;
+    int *Ap, *Ai, *Map;
+    double *A;
+#endif
 public:
-    LinearSolverEdf() : EDFobject_v2() {}
-    virtual ~LinearSolverEdf() {}
+    LinearSolverEdf(int nnz, int nb, int nx) : EDFobject_v2() {
+#ifdef WITH_UMFPACK
+        klu_defaults(&common);
+        symbolic = NULL;
+        numeric = NULL;
+        Map = NULL;
+        Ap = (int*)calloc(nb+1,sizeof(int));
+        Ai = (int*)calloc(nnz,sizeof(int));
+        A = (double*)calloc(nnz,sizeof(double));
+#endif
+    }
+    virtual ~LinearSolverEdf() {
+#ifdef WITH_UMFPACK
+        free(Ap);
+        free(Ai);
+        free(A);
+        free(Map);
+        if (Map != NULL)
+            free(Map);
+        if (symbolic != NULL)
+            klu_free_symbolic(&symbolic,&common);
+        if (numeric != NULL)
+            klu_free_numeric(&numeric,&common);
+#endif
+    }
     virtual int function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
     virtual int zos_forward(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
     virtual int fos_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, double **xp, int *outsz, double **y, double **yp, void *ctx);
@@ -87,14 +129,57 @@ int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *in
   int nrhs = 1;
   int info;
 
-  double* A = (double*) calloc(nb*nx, sizeof(double));
-  int *ipriv = (int*) calloc(nx, sizeof(int));
-
   double* b = y[0];
   for(int i=0; i<nb; ++i){
     b[i] = x[1][i];
     //printf("b[%d] = %f\n", i, b[i]);
   }
+#ifdef WITH_UMFPACK
+  if ( Map == NULL ) {
+      Map = (int*)calloc(nnz,sizeof(int));
+      int *Tr = (int*)calloc(nnz,sizeof(int));
+      int *Tc = (int*)calloc(nnz,sizeof(int));
+      for (int i = 0; i < nnz; i++) {
+          Tr[i] = iArr[2*i];
+          Tc[i] = iArr[2*i+1];
+      }
+      umfpack_di_triplet_to_col(nb,nx,nnz,Tr,Tc,x[0],Ap,Ai,A,Map);
+      free(Tr);
+      free(Tc);
+  } else {
+      for (int p = 0 ; p < Ap [nb] ; p++) A [p] = 0 ;
+      for (int k = 0 ; k < nnz ; k++) A [Map [k]] += x[0][k] ;
+  }
+  if ( symbolic == NULL ) {
+      symbolic = klu_analyze(nb,Ap,Ai,&common);
+   }
+  info = 0;
+  if(common.status == 0) {
+      if (numeric != NULL) {
+          klu_refactor(Ap, Ai, A, symbolic, numeric, &common);
+          klu_rgrowth(Ap, Ai, A, symbolic, numeric, &common);
+          infoStreamPrint(LOG_LS_V, 0, "Klu rgrowth after refactor: %f", common.rgrowth);
+          if (common.rgrowth < 1e-3) {
+              klu_free_numeric(&numeric,&common);
+              numeric = klu_factor(Ap,Ai,A,symbolic,&common);
+              infoStreamPrint(LOG_LS_V, 0, "Klu new factorization performed.");
+          }
+      } else {
+          numeric = klu_factor(Ap,Ai,A,symbolic,&common);
+      }
+  }
+  if(common.status == 0) {
+     info = klu_solve(symbolic,numeric,nb,1,b,&common);
+  }
+  if (!info) {
+      printf("function: Error solving linear system of equations\n");
+      return 1;
+  } else {
+      common.status = 0;
+  }
+#else
+  double* A = (double*) calloc(nb*nx, sizeof(double));
+  int *ipriv = (int*) calloc(nx, sizeof(int));
 
   for(int i = 0; i<nnz; ++i){
     A[iArr[2*i]+iArr[2*i+1]*nb] = x[0][i];
@@ -119,7 +204,7 @@ int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *in
     printf("function: Error solving linear system of equations. System singular in row %d.\n", info);
     return -info;
   }
-
+#endif
   return 0;
 }
 
@@ -131,9 +216,10 @@ int LinearSolverEdf::zos_forward(int iArrLen, int *iArr, int nin, int nout, int 
 
 int LinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, double **xp, int *outsz, double **y, double **yp, void *ctx) {
 
-
+  int ret;
   // x = A^{-1}*b
-  function(iArrLen, iArr, nin, nout, insz, x, outsz, y, ctx);
+  ret = function(iArrLen, iArr, nin, nout, insz, x, outsz, y, ctx);
+  if (ret == 0) {
 
   //x^{.} = A^{-1}*(\dot b - \dot A*x)
   // \dot b -> xp[1]
@@ -145,24 +231,42 @@ int LinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int 
   int nrhs = 1;
   int info;
 
+  double* b = yp[0];
+  // copy \dot b
+  for(int i=0; i<nb; ++i){
+    b[i] = xp[1][i];
+  }
+
+  // \dot b = \dot b - \dot A * x
+  for (int i = 0; i < nnz; i++) {
+      b[iArr[2*i]] -= xp[0][i]*y[0][iArr[2*i+1]];
+  }
+#ifdef WITH_UMFPACK
+  // numeric contains the correct factorization since we called
+  // function() above
+  info = klu_solve(symbolic,numeric,nb,1,b,&common);
+  if (!info) {
+      printf("function: Error solving linear system of equations\n");
+      return 1;
+  } else {
+      common.status = 0;
+  }
+#else
   double* A = (double*) calloc(nb*nx, sizeof(double));
   int *ipriv = (int*) calloc(nx, sizeof(int));
 
+  /*
   for(int i = 0; i<nnz; ++i){
     A[iArr[2*i]+iArr[2*i+1]*nb] = xp[0][i];
   }
 
-  double* b = yp[0];
-  for(int i=0; i<nb; ++i){
-    b[i] = xp[1][i];
-  }
 
   char trans = 'N';
   double alpha = -1.0;
   double beta = 1.0;
   int incx = 1;
   dgemv_(&trans, &nb, &nx, &alpha, A, &nx, y[0], &incx, &beta, b, &incx);
-
+  */
 
   for(int i = 0; i<nnz; ++i){
     A[iArr[2*i]+iArr[2*i+1]*nb] = x[0][i];
@@ -179,16 +283,18 @@ int LinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int 
     printf("fos_forward: Error solving linear system of equations. System singular in row %d.\n", info);
     return -info;
   }
-
+#endif
   return 0;
+  } else return ret;
 }
 
 
 
 int LinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int *insz, double **x, int ndir, double ***Xp, int *outsz, double **y, double ***Yp, void* ctx) {
-
+  int ret;
   // x = A^{-1}*b
-  function(iArrLen, iArr, nin, nout, insz, x, outsz, y, ctx);
+  ret = function(iArrLen, iArr, nin, nout, insz, x, outsz, y, ctx);
+  if (ret == 0) {
 
   // \dot x = A^(-1)*(\dot B - \dot \underscore{A}*x)
   // \dot b -> xp[1]
@@ -200,9 +306,28 @@ int LinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int 
   int nrhs = ndir;
   int info;
 
+  // b must be column major while Yp[0] is row-major so we can not
+  // use the same memory and must copy the result in Yp[0] later
+  double** b = myalloc2(ndir,nb);
+  for (int k = 0; k < ndir; ++k){
+
+  // copy \dot b
+    for(int i=0; i<nb; ++i){
+      b[k][i] = Xp[1][i][k];
+    }
+
+    // \dot b = \dot b - \dot A * x
+    for (int i = 0; i < nnz; i++) {
+        b[k][iArr[2*i]] -= Xp[0][i][k]*y[0][iArr[2*i+1]];
+    }
+  }
+#ifdef WITH_UMFPACK
+  // numeric contains the correct factorization since we called
+  // function() above
+  info = klu_solve(symbolic,numeric,nb,ndir,&b[0][0],&common);
+#else
   double* A = (double*) calloc(nb*nx, sizeof(double));
   int *ipriv = (int*) calloc(nx, sizeof(int));
-  double** b = Yp[0];
 
   char trans = 'N';
   double alpha = -1.0;
@@ -210,8 +335,8 @@ int LinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int 
   int incx = 1;
   int incy = ndir;
 
+  /*
   for (int k = 0; k < ndir; ++k){
-
     for(int i = 0; i<nnz; ++i){
       A[iArr[2*i]+iArr[2*i+1]*nb] = Xp[0][i][k];
     }
@@ -222,7 +347,7 @@ int LinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int 
 
     dgemv_(&trans, &nb, &nx, &alpha, A, &nx, y[0], &incx, &beta, &b[0][k], &incy);
   }
-
+  */
   for(int i = 0; i<nnz; ++i){
     A[iArr[2*i]+iArr[2*i+1]*nb] = x[0][i];
   }
@@ -231,6 +356,24 @@ int LinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int 
 
   free(A);
   free(ipriv);
+#endif
+
+  // copy \dot y
+  for (int k = 0; k < ndir; ++k){
+    for(int i=0; i<nb; ++i){
+      Yp[0][i][k] = b[k][i];
+    }
+  }
+  myfree2(b);
+
+#ifdef WITH_UMFPACK
+  if (!info) {
+      printf("function: Error solving linear system of equations\n");
+      return 1;
+  } else {
+      common.status = 0;
+  }
+#else
   if(info < 0){
     printf("fov_forward: Error solving linear system of equations. Argument %d illegal.\n", info);
     return -info;
@@ -238,8 +381,9 @@ int LinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int 
     printf("fov_forward: Error solving linear system of equations. System singular in row %d.\n", info);
     return -info;
   }
-
+#endif
   return 0;
+  } else return ret;
 }
 
 
@@ -660,7 +804,7 @@ unsigned int alloc_adolc_lin_sol(int nnz, int nb, int nx) {
     insz[0] = nnz;
     insz[1] = nb;
     outsz[0] = nx;
-    linSolEdfVec.emplace_back();
+    linSolEdfVec.emplace_back(nnz,nb,nx);
     linSolEdfVec.back().allocate_mem(2,1,insz,outsz);
     return linSolEdfVec.back().get_index();
 }
