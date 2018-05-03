@@ -1031,7 +1031,7 @@ package MathOperation
       list<Integer> independents;
       list<Integer> dependents;
       String name;
-      Integer numParameters;
+      Integer numRealParameters;
     end OPERATIONDATA;
   end OperationData;
 

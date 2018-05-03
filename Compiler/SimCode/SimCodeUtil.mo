@@ -630,8 +630,9 @@ algorithm
       (odeEquations,adolcIndex) := setAdolcIndexSystList(odeEquations);
       odeEquations := setAdolcIndexSystList(odeEquations, adolcIndex, false);
       modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations),
-                                                              crefToSimVarHT, 2*modelInfo.varInfo.numStateVars+modelInfo.varInfo.numAlgVars , tmpSimVars.paramVars, filenamePrefix,
-                                                              funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars);
+                                                              crefToSimVarHT, 2*modelInfo.varInfo.numStateVars+modelInfo.varInfo.numAlgVars, 
+                                                              modelInfo.varInfo.numIntAlgVars,
+                                                              tmpSimVars.paramVars, filenamePrefix, funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars);
       //MathOperation.dumpOperationData(modelOperationData);
       execStat("simCode: ADOLC createOperationData");
     else
