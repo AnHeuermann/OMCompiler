@@ -529,8 +529,10 @@ int NonLinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int 
     for(i=0;i<outsz[1];i++) {
     	y[1][i] = data->x[i];
     }
+    if (outsz[0] > 0) {
     set_param_vec(trace3, num_param1, allparams1);
     ::zos_forward(trace3,outsz[0],outsz[1],0,y[1],y[0]);
+    }
     free(allparams1);
     free(outerparams);
     return 0;
@@ -573,9 +575,12 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     }
     double **J1 = myalloc2(outsz[1],outsz[1]);
     jacobian(trace1,outsz[1],outsz[1],y[1],J1);
-    double **J3 = myalloc2(outsz[0],outsz[1]);
+    double **J3;
+    if (outsz[0] > 0) {
+    J3 = myalloc2(outsz[0],outsz[1]);
     set_param_vec(trace3, num_param1, allparams1);
     jacobian(trace3,outsz[0],outsz[1],y[1],J3);
+    }
     free(allparams1);
 
     // finally compute jacobian or resid,y1 wrt y2 after convergence in J
@@ -640,6 +645,7 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     //free(A);
     // compute yp[0] = J3*yp[1] + dy1/dx <=> yp[0] = A*yp[1]+b
 
+    if (outsz[0] > 0) {
     A = &J3[0][0];
     b = yp[0];
     for(int i=0; i<outsz[0]; ++i){
@@ -652,6 +658,7 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     dgemv_(&trans, &outsz[1], &outsz[0], &alpha, A, &outsz[1], yp[1], &incx, &beta, b, &incx);
 
     myfree2(J3);
+    }
     free(J2);
     free(outerparams);
     free(allparams2);
@@ -694,10 +701,13 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     double **J1 = myalloc2(outsz[1],outsz[1]);
     jacobian(trace1,outsz[1],outsz[1],y[1],J1);
     // J1 = partial deriv dr/dy1
-    double **J3 = myalloc2(outsz[0],outsz[1]);
+    double **J3;
+    if (outsz[0] > 0) {
+    J3 = myalloc2(outsz[0],outsz[1]);
     set_param_vec(trace3, num_param1, allparams1);
     jacobian(trace3,outsz[0],outsz[1],y[1],J3);
     // J3 = partial deriv dy0/dy1
+    }
     free(allparams1);
 
     // finally compute jacobian or resid,y0 wrt x after convergence in J2
@@ -753,6 +763,7 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     //free(A);
     // compute yp[0] = J3*yp[1] + dy1/dx <=> yp[0] = A*yp[1]+b
 
+    if (outsz[0] > 0) {
     A = &J3[0][0];
     double alpha = 1.0;
     double beta = 1.0;
@@ -766,6 +777,7 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     }
     dgemm_(&trans,&trans,&ndir,&outsz[1],&outsz[1],&alpha,&Yp[1][0][0],&outsz[1],A,&outsz[1],&beta,&b[0][0],&ndir);
     myfree2(J3);
+    }
     myfree2(J2);
     free(outerparams);
     free(allparams2);
