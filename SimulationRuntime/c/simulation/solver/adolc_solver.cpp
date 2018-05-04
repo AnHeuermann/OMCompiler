@@ -73,6 +73,28 @@ int dgemm_(char* transa, char* transb, int* m, int* n, int* k, double* alpha,
            int* ldc);
 }
 
+static void printvec(const char* name, int m, double* v) {
+    int i,j;
+
+    printf("%s \n",name);
+    for(i=0; i<m ;i++) {
+        printf(" %10.4f ", v[i]);
+    }
+    printf("\n");
+}
+
+static void printmat(const char* name, int m, int n, double** M) {
+    int i,j;
+
+    printf("%s \n",name);
+    for(i=0; i<m ;i++) {
+        printf("\n %d: ",i);
+        for(j=0;j<n ;j++)
+            printf(" %10.4f ", M[i][j]);
+    }
+    printf("\n");
+}
+
 class LinearSolverEdf : public EDFobject_v2 {
 #ifdef WITH_UMFPACK
 protected:
@@ -454,6 +476,7 @@ int wrapper_fvec_newton_adolc(int* n, double* x, double* fvec, void* userdata, i
 		::zos_forward(nledf->trace1,*n,*n,0,x,fvec);
 	} else {
 		::fov_forward(nledf->trace1,*n,*n,*n,x,nledf->I2,fvec,nledf->J);
+            //printmat("In Newton Jac", *n, *n, nledf->J);
 	}
 	return 0;
 }
@@ -570,6 +593,7 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     if (data->info <0){
     	throw FatalError(data->info, "Nonlinear solver failed!", __func__, __FILE__, __LINE__);
     }
+    //printf("_omc_newton_info = %d\n", data->info);
     for(i=0;i<outsz[1];i++) {
     	y[1][i] = data->x[i];
     }
@@ -633,14 +657,19 @@ int NonLinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, i
     if (info == 0) {
         dgetrs_(&trans, &outsz[1], &nrhs, A, &outsz[1], ipriv, b, &outsz[1], &info);
     }
+    free(ipriv);
+    myfree2(J1);
     if (info < 0) {
         printf("fos_forward: Error solving linear system of equations. Argument %d illegal.\n", info);
+        if (outsz[0] > 0)
+            myfree2(J3);
+        free(J2);
+        free(outerparams);
+        free(allparams2);
         return -1;
     }
     //dgesv_(&outsz[1], &nrhs, A, &outsz[1], ipriv, b, &outsz[1], &info);
 
-    free(ipriv);
-    myfree2(J1);
 
     //free(A);
     // compute yp[0] = J3*yp[1] + dy1/dx <=> yp[0] = A*yp[1]+b
@@ -695,6 +724,7 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     if (data->info <0){
     	throw FatalError(data->info, "Nonlinear solver failed!", __func__, __FILE__, __LINE__);
     }
+    //printf("_omc_newton_info = %d\n", data->info);
     for(i=0;i<outsz[1];i++) {
     	y[1][i] = data->x[i];
     }
@@ -731,21 +761,31 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
         	y[0][i] = depen[outsz[1]+i];
     }
     free(depen);
+    /*
+    printvec("y1", outsz[1], y[1]);
+    printvec("y0", outsz[0], y[0]);
+    printmat("trace1", outsz[1],outsz[1],J1);
+    printmat("trace3", outsz[0],outsz[1],J3);
+    printmat("trace2", num_depen2,ndir,J2);
+    */
     // First outsz[1] rows of J2 contain partial deriv dr/dx, next outsz[0] rows
     // contain partial deriv dy0/dx
     // solve yp[1] = - J1^{-1} * dr/dx using a linear solver
 
     int nrhs = ndir;
     int info;
-    char trans = 'T';
+    char trans = 'T', notrans = 'N';
     double* A = &J1[0][0];
 
-    double** b = Yp[1];
+    //if (outsz[1] > 1) {
+  // b must be column major while Yp[0] is row-major so we can not
+  // use the same memory and must copy the result in Yp[0] later
+    double** b = myalloc2(ndir,outsz[1]);//Yp[1];
     for(int i=0; i<outsz[1]; ++i){
         for(int j=0; j<ndir; ++j) {
-            b[i][j] = -J2[i][j];
-      //printf("b[%d] = %f\n", i, b[i])
-        };
+            b[j][i] = -J2[i][j];
+      //printf("b[%d] = %f\n", i, b[i]);
+        }
     }
     int *ipriv = (int*) calloc(outsz[1], sizeof(int));
     
@@ -753,30 +793,53 @@ int NonLinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, i
     if (info == 0) {
         dgetrs_(&trans, &outsz[1], &nrhs, A, &outsz[1], ipriv, &b[0][0], &outsz[1], &info);
     }
-    if (info < 0) {
-        printf("fos_forward: Error solving linear system of equations. Argument %d illegal.\n", info);
-        return -1;
+
+    for(int i=0; i<outsz[1]; ++i){
+        for(int j=0; j<ndir; ++j) {
+            Yp[1][i][j] = b[j][i];
+        };
     }
+    myfree2(b);
     free(ipriv);
     myfree2(J1);
-
+    if (info < 0) {
+        printf("fos_forward: Error solving linear system of equations. Argument %d illegal.\n", info);
+        myfree2(b);
+        if (outsz[0] > 0)
+            myfree2(J3);
+        myfree2(J2);
+        free(outerparams);
+        free(allparams2);
+        return -1;
+    }
+    //} else {
+    //    for(int j=0; j<ndir; ++j)
+    //        Yp[1][0][j] = -J2[0][j]/A[0];
+    //}
+    //printmat("Yp1",outsz[1],ndir,Yp[1]);
     //free(A);
-    // compute yp[0] = J3*yp[1] + dy1/dx <=> yp[0] = A*yp[1]+b
+    // compute yp[0] = J3*yp[1] + dy0/dx <=> yp[0] = A*yp[1]+b
 
     if (outsz[0] > 0) {
     A = &J3[0][0];
     double alpha = 1.0;
     double beta = 1.0;
     int incx = 1;
-    b = Yp[0];
+    double **b = myalloc2(ndir,outsz[0]);
     for(int k=0; k<ndir; ++k) {
         for(int i=0; i<outsz[0]; ++i){
-            b[i][k] = J2[outsz[1]+i][k];
+            b[k][i] = J2[outsz[1]+i][k];
             //printf("b[%d] = %f\n", i, b[i]);
         }
     }
     dgemm_(&trans,&trans,&ndir,&outsz[1],&outsz[1],&alpha,&Yp[1][0][0],&outsz[1],A,&outsz[1],&beta,&b[0][0],&ndir);
     myfree2(J3);
+    for(int i=0; i<outsz[0]; ++i){
+        for(int j=0; j<ndir; ++j) {
+            Yp[0][i][j] = b[j][i];
+        };
+    }
+    myfree2(b);
     }
     myfree2(J2);
     free(outerparams);
