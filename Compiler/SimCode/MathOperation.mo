@@ -894,14 +894,13 @@ algorithm
     case (BackendDAE.DISCRETE()) algorithm
       _ := match(simVar.type_)
         case (DAE.T_INTEGER()) equation 
-          indexShift = 1 + workingArgs.numRealParameters;
+          indexShift = 1 + workingArgs.numRealVariables;
         then ();
         else equation
           print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
           Error.addInternalError("getSimVarAndIndex unhandled type!", sourceInfo());
         then fail();
       end match;
-      handleAsParameter := true;
     then ();
     case (BackendDAE.PARAM()) algorithm
       _ := match(simVar.type_)
@@ -909,8 +908,7 @@ algorithm
           indexShift = 1;
         then (); 
         case (DAE.T_INTEGER()) equation 
-          indexShift = 1 + workingArgs.numRealParameters + workingArgs.numIntVariables;
-          handleAsParameter = true;
+          indexShift = 1 + workingArgs.numRealParameters;
         then ();
         else equation
           print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
