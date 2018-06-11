@@ -87,6 +87,8 @@ static int jacA_sym(double *t, double *y, double *yprime, double *deltaD, double
        double *rpar, int* ipar);
 static int jacA_symColored(double *t, double *y, double *yprime, double *deltaD, double *pd, double *cj, double *h, double *wt,
        double *rpar, int* ipar);
+static int jacobianADOLCColored(double *t, double *y, double *yprime, double *deltaD, double *pd, double *cj, double *h, double *wt,
+       double *rpar, int* ipar);
 static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, double *pd, double *cj, double *h, double *wt,
     double *rpar, int* ipar);
 static int JacobianADOLCSparse(double *t, double *y, double *yprime, double *deltaD, double *pd, double *cj, double *h, double *wt,
@@ -372,6 +374,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
   /* selects the calculation method of the jacobian */
   if(dasslData->dasslJacobian == COLOREDNUMJAC ||
      dasslData->dasslJacobian == COLOREDSYMJAC ||
+     dasslData->dasslJacobian == ADOLCSPARSE ||
      dasslData->dasslJacobian == SYMJAC)
   {
     ANALYTIC_JACOBIAN* jacobian = &(data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A]);
@@ -418,6 +421,8 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal +
           data->modelData->nVariablesInteger+data->modelData->nParametersInteger)*sizeof(double));
+      dasslData->adolcJacSeed = NULL;
+      dasslData->adolcColoredJac = NULL;
 
       // allocate memory for linear systems
       initialize_linearSystems(data);
@@ -447,9 +452,13 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       {
         rt_tick(SIM_TIMER_ADOLC_INIT);
       }
-      dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
+      //dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
+      dasslData->adolcJac = NULL;
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal +
           data->modelData->nVariablesInteger+data->modelData->nParametersInteger)*sizeof(double));
+      fprintf(stderr,"rows: %d cols: %d maxColors: %d\n",data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeRows,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeCols,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
+      dasslData->adolcJacSeed = myalloc2(data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeCols,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
+      dasslData->adolcColoredJac = myalloc2(data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeRows,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
 
       // allocate memory for linear systems
       initialize_linearSystems(data);
@@ -464,7 +473,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
       //write_ascii_trace(filename2, 0);
       //dasslData->residualFunction = functionODE_residualADOLC;
-      dasslData->jacobianFunction =  JacobianADOLCSparse;
+      dasslData->jacobianFunction =  jacobianADOLCColored;
       if(measure_time_flag)
       {
         rt_accumulate(SIM_TIMER_ADOLC_INIT);
@@ -538,7 +547,14 @@ int dassl_deinitial(DASSL_DATA *dasslData)
   free(dasslData->newdelta);
   free(dasslData->states);
   free(dasslData->stateDer);
-
+  if (dasslData->useAdolc)
+      free(dasslData->adolcParam);
+  if (dasslData->useAdolc && dasslData->adolcJac)
+      myfree2(dasslData->adolcJac);
+  if (dasslData->useAdolc && dasslData->adolcJacSeed)
+      myfree2(dasslData->adolcJacSeed);
+  if (dasslData->useAdolc && dasslData->adolcColoredJac)
+      myfree2(dasslData->adolcColoredJac);
   free(dasslData);
 
   TRACE_POP
@@ -1324,6 +1340,56 @@ static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, d
 /*
  * provides a numerical Jacobian to be used with DASSL by ADOLC
  */
+static int jacobianADOLCColored(double *t, double *y, double *yprime, double *delta, double *matrixA, double *cj, double *h, double *wt, double *rpar, int *ipar)
+{
+  TRACE_PUSH
+  DATA* data = (DATA*)(void*)((double**)rpar)[0];
+  DASSL_DATA* dasslData = (DASSL_DATA*)(void*)((double**)rpar)[1];
+  threadData_t *threadData = (threadData_t*)(void*)((double**)rpar)[2];
+
+  const int index = data->callback->INDEX_JAC_A;
+  unsigned int i,j,l,k,ii;
+
+  for(i=0; i < data->simulationInfo->analyticJacobians[index].sparsePattern.maxColors; i++)
+  {
+    for(ii=0; ii < data->simulationInfo->analyticJacobians[index].sizeCols; ii++)
+      if(data->simulationInfo->analyticJacobians[index].sparsePattern.colorCols[ii]-1 == i)
+        dasslData->adolcJacSeed[ii][i] = 1;
+  }
+
+  double *result = myalloc1(dasslData->N);
+
+  updateTimeParamLoc(dasslData->adolcParam, *t);
+  set_param_vec(data->simulationInfo->adolcTag, data->modelData->nParametersReal+1 , dasslData->adolcParam);
+  fov_forward(data->simulationInfo->adolcTag, dasslData->N, dasslData->N,
+              data->simulationInfo->analyticJacobians[index].sparsePattern.maxColors,
+              y, dasslData->adolcJacSeed, result, dasslData->adolcColoredJac);
+
+  myfree1(result);
+
+  for(i=0; i < data->simulationInfo->analyticJacobians[index].sparsePattern.maxColors; i++)
+  {
+    for(j = 0; j < data->simulationInfo->analyticJacobians[index].sizeCols; j++)
+    {
+      if(dasslData->adolcJacSeed[j][i] == 1)
+      {
+        ii = data->simulationInfo->analyticJacobians[index].sparsePattern.leadindex[j];
+        while(ii < data->simulationInfo->analyticJacobians[index].sparsePattern.leadindex[j+1])
+        {
+          l  = data->simulationInfo->analyticJacobians[index].sparsePattern.index[ii];
+          k  = j*data->simulationInfo->analyticJacobians[index].sizeRows + l;
+          matrixA[k] = dasslData->adolcColoredJac[l][i];
+          ii++;
+        };
+      }
+    }
+
+  }
+
+  TRACE_POP
+  return 0;
+}
+
 static int JacobianADOLCSparse(double *t, double *y, double *yprime, double *deltaD, double *pd, double *cj, double *h, double *wt,
    double *rpar, int* ipar)
 {

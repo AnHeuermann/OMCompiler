@@ -74,6 +74,9 @@ typedef struct DASSL_DATA{
   double *states;
 
   double** adolcJac;
+  double** adolcJacSeed;
+  double** adolcColoredJac;
+
   double* adolcParam;
   int useAdolc;
 
