@@ -674,7 +674,7 @@ algorithm
           operations := op::operations;
 
           i := 0;
-          for cr in listAppend(listReverse(innerCrefs), listReverse(crefs)) loop
+          for cr in listAppend(listReverse(innerCrefs), crefs) loop
             simVar := BaseHashTable.get(cr, workingArgs.crefToSimVarHT);
             op := OPERATION({OPERAND_INDEX(workingArgs.tmpIndex+i)}, ASSIGN_ACTIVE(), OPERAND_VAR(simVar));
             operations := op::operations;
