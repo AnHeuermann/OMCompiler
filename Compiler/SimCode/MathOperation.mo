@@ -132,6 +132,13 @@ public uniontype Operation
   end OPERATION;
 end Operation;
 
+public uniontype LinSysPattern
+  record LINSYSPATTERN
+    Integer adolcIndex;
+    list<Integer> pattern;
+  end LINSYSPATTERN;
+end LinSysPattern;
+
 public uniontype OperationData
   record OPERATIONDATA
     list<Operation> operations;
@@ -140,6 +147,7 @@ public uniontype OperationData
     list<Integer> dependents;
     String name;
     Integer numRealParameters;
+    list<LinSysPattern> linSysPat;
   end OPERATIONDATA;
 end OperationData;
 
@@ -551,7 +559,7 @@ protected
 algorithm
   (operations, workingArgs) := createOperationDataStmts(funcBody, workingArgs);
   operations := listReverse(operations);
-  outOperationData := OPERATIONDATA(operations, workingArgs.tmpIndex, {}, {}, "", 0);
+  outOperationData := OPERATIONDATA(operations, workingArgs.tmpIndex, {}, {}, "", 0, {});
 end createOperationsForFunction;
 
 protected function createOperationEqns
@@ -563,10 +571,12 @@ protected
   list<Operation> operations, tmpOps;
   Integer maxTmpIndex = inWorkingArgs.numRealVariables;
   list<DAE.Statement> statements;
+  list<LinSysPattern> lsPat;
   constant Boolean debug = false;
 algorithm
   try
     operations := {};
+    lsPat := {};
     for eq in inEquations loop
       () := matchcontinue eq
       local
@@ -585,6 +595,7 @@ algorithm
         Integer i, nnz, indexB, nb,  indexA, indexX, row, col, nx, adolcIndex;
         list<Operand> intOpds = {};
         SimCode.NonlinearSystem nlSystem;
+        list<Integer> pattern = {};
 
         // SIMPLE_ASSIGN
         case SimCode.SES_SIMPLE_ASSIGN(index=index, exp=exp, cref=cref) equation
@@ -720,7 +731,7 @@ algorithm
 
           for tpl in simJac loop
             (row,col,SimCode.SES_RESIDUAL(exp=exp)) := tpl;
-            intOpds := OPERAND_INDEX(col)::OPERAND_INDEX(row)::intOpds;
+            pattern := col::row::pattern;
             ({assignOperand}, operations, workingArgs) := collectOperationsForExp(exp, operations, workingArgs);
             simVarOperand := OPERAND_INDEX(indexA + i);
 
@@ -737,17 +748,19 @@ algorithm
             end if;
             i := i + 1;
           end for;
-          intOpds := listReverse(intOpds);
-
+          pattern := listReverse(pattern);
+          // create linear system pattern
+          lsPat := LINSYSPATTERN(adolcIndex,pattern)::lsPat;
           // tmp var x
           nx := listLength(vars);
           indexX := workingArgs.tmpIndex;
           workingArgs.tmpIndex := workingArgs.tmpIndex+nx;
 
           // create operation for ext diff call
-          i := listLength(intOpds);
-          intOpds := OPERAND_INDEX(adolcIndex)::OPERAND_INDEX(i)::intOpds;
-          intOpds := listAppend(intOpds, {OPERAND_INDEX(i),OPERAND_INDEX(2),OPERAND_INDEX(1),OPERAND_INDEX(nnz),
+          //i := listLength(intOpds);
+          //intOpds := OPERAND_INDEX(adolcIndex)::OPERAND_INDEX(i)::intOpds;
+          intOpds := OPERAND_INDEX(adolcIndex)::OPERAND_INDEX(0)::OPERAND_INDEX(0)::intOpds;
+          intOpds := listAppend(intOpds, {OPERAND_INDEX(2),OPERAND_INDEX(1),OPERAND_INDEX(nnz),
                                OPERAND_INDEX(indexA), OPERAND_INDEX(nb), OPERAND_INDEX(indexB),
                                OPERAND_INDEX(nx), OPERAND_INDEX(indexX), OPERAND_INDEX(2)});
           result := OPERAND_INDEX(1);
@@ -779,7 +792,8 @@ algorithm
       maxTmpIndex := intMax(maxTmpIndex, workingArgs.tmpIndex);
     end for;
     operations := listReverse(operations);
-    outOperationData := OPERATIONDATA(operations, maxTmpIndex, {}, {}, "", 0);
+    lsPat := listReverse(lsPat);
+    outOperationData := OPERATIONDATA(operations, maxTmpIndex, {}, {}, "", 0, lsPat);
   else
     Error.addInternalError("createModelInfo failed", sourceInfo());
     fail();

@@ -96,8 +96,9 @@ static void printmat(const char* name, int m, int n, double** M) {
 }
 
 class LinearSolverEdf : public EDFobject_v2 {
-#ifdef WITH_UMFPACK
 protected:
+    int *rind, *cind;
+#ifdef WITH_UMFPACK
     klu_symbolic *symbolic;
     klu_numeric *numeric;
     klu_common common;
@@ -105,7 +106,15 @@ protected:
     double *A;
 #endif
 public:
-    LinearSolverEdf(int nnz, int nb, int nx) : EDFobject_v2() {
+    LinearSolverEdf(char* fname, int nnz, int nb, int nx) : EDFobject_v2() {
+        FILE *patfile;
+        rind = (int*) calloc(nnz,sizeof(int));
+        cind = (int*) calloc(nnz,sizeof(int));
+        patfile = fopen(fname,"r");
+        for (int i=0; i < nnz; ++i) {
+            fscanf(patfile, "%d %d", &rind[i], &cind[i]);
+        }
+        fclose(patfile);
 #ifdef WITH_UMFPACK
         klu_defaults(&common);
         symbolic = NULL;
@@ -129,6 +138,8 @@ public:
         if (numeric != NULL)
             klu_free_numeric(&numeric,&common);
 #endif
+        free(rind);
+        free(cind);
     }
     virtual int function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
     virtual int zos_forward(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx);
@@ -159,15 +170,7 @@ int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *in
 #ifdef WITH_UMFPACK
   if ( Map == NULL ) {
       Map = (int*)calloc(nnz,sizeof(int));
-      int *Tr = (int*)calloc(nnz,sizeof(int));
-      int *Tc = (int*)calloc(nnz,sizeof(int));
-      for (int i = 0; i < nnz; i++) {
-          Tr[i] = iArr[2*i];
-          Tc[i] = iArr[2*i+1];
-      }
-      umfpack_di_triplet_to_col(nb,nx,nnz,Tr,Tc,x[0],Ap,Ai,A,Map);
-      free(Tr);
-      free(Tc);
+      umfpack_di_triplet_to_col(nb,nx,nnz,rind,cind,x[0],Ap,Ai,A,Map);
   } else {
       for (int p = 0 ; p < Ap [nb] ; p++) A [p] = 0 ;
       for (int k = 0 ; k < nnz ; k++) A [Map [k]] += x[0][k] ;
@@ -204,7 +207,7 @@ int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *in
   int *ipriv = (int*) calloc(nx, sizeof(int));
 
   for(int i = 0; i<nnz; ++i){
-    A[iArr[2*i]+iArr[2*i+1]*nb] = x[0][i];
+    A[rind[i]+cind[i]*nb] = x[0][i];
     //printf("A[%d, %d] = %f\n", iArr[2*i], iArr[2*i+1], A[iArr[2*i]+iArr[2*i+1]*nb]);
   }
 
@@ -261,7 +264,7 @@ int LinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int 
 
   // \dot b = \dot b - \dot A * x
   for (int i = 0; i < nnz; i++) {
-      b[iArr[2*i]] -= xp[0][i]*y[0][iArr[2*i+1]];
+      b[rind[i]] -= xp[0][i]*y[0][cind[i]];
   }
 #ifdef WITH_UMFPACK
   // numeric contains the correct factorization since we called
@@ -291,7 +294,7 @@ int LinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int 
   */
 
   for(int i = 0; i<nnz; ++i){
-    A[iArr[2*i]+iArr[2*i+1]*nb] = x[0][i];
+    A[rind[i]+cind[i]*nb] = x[0][i];
   }
 
   dgesv_(&nx, &nrhs, A, &nx, ipriv, b, &nb, &info);
@@ -340,7 +343,7 @@ int LinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int 
 
     // \dot b = \dot b - \dot A * x
     for (int i = 0; i < nnz; i++) {
-        b[k][iArr[2*i]] -= Xp[0][i][k]*y[0][iArr[2*i+1]];
+        b[k][rind[i]] -= Xp[0][i][k]*y[0][cind[i]];
     }
   }
 #ifdef WITH_UMFPACK
@@ -371,7 +374,7 @@ int LinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int 
   }
   */
   for(int i = 0; i<nnz; ++i){
-    A[iArr[2*i]+iArr[2*i+1]*nb] = x[0][i];
+    A[rind[i]+cind[i]*nb] = x[0][i];
   }
 
   dgesv_(&nx, &nrhs, A, &nx, ipriv, &b[0][0], &nb, &info);
@@ -874,12 +877,12 @@ int NonLinearSolverEdf::fov_reverse(int iArrLen, int* iArr, int nout, int nin, i
 }
 
 
-unsigned int alloc_adolc_lin_sol(int nnz, int nb, int nx) {
+unsigned int alloc_adolc_lin_sol(char* fname, int nnz, int nb, int nx) {
     int insz[2], outsz[1];
     insz[0] = nnz;
     insz[1] = nb;
     outsz[0] = nx;
-    linSolEdfVec.emplace_back(nnz,nb,nx);
+    linSolEdfVec.emplace_back(fname,nnz,nb,nx);
     linSolEdfVec.back().allocate_mem(2,1,insz,outsz);
     return linSolEdfVec.back().get_index();
 }

@@ -38,7 +38,7 @@
 extern "C" {
 #endif
 
-unsigned int alloc_adolc_lin_sol(int nnz, int nb, int nx);
+unsigned int alloc_adolc_lin_sol(char* fname, int nnz, int nb, int nx);
 
 unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny1, int ny2,short* usetag);
 

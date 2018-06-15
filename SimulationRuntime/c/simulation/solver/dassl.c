@@ -139,10 +139,12 @@ void initialize_linearSystems(DATA *data)
 	LINEAR_SYSTEM_DATA *lsData = data->simulationInfo->linearSystemData;
 	int i;
 	unsigned int outIdx;
+        char filename[128];
 	for(i=0; i <data->modelData->nLinearSystems; i++)
 	{
 		if (lsData[i].adolcIndex>=0){
-		  outIdx = alloc_adolc_lin_sol(lsData[i].nnz, lsData[i].size, lsData[i].size);
+                    sprintf(filename, "%s_ls_%ld_pat.txt", data->modelData->modelFilePrefix, lsData[i].adolcIndex);
+		  outIdx = alloc_adolc_lin_sol(filename, lsData[i].nnz, lsData[i].size, lsData[i].size);
 		  if (outIdx != lsData[i].adolcIndex){
 			  errorStreamPrint(LOG_STDOUT, 0, "ADOLC Linear System Index does not match! %u != %ld", outIdx, lsData[i].adolcIndex);
 		  }

@@ -20,6 +20,7 @@ import ExpressionDumpTpl;
   match simCode
   case simCode as SIMCODE(modelOperationData=modelOperationData) then
     let text = (modelOperationData |> opData as OPERATIONDATA(name=name) => textFile(createAdolcTrace(opData), '<%name%>_aat.txt'))
+    let text2 = (modelOperationData |> opData as OPERATIONDATA(__) => createPatternFiles(opData))
     <<>>
   end match 
 end generateAdolcAsciiTrace;
@@ -96,6 +97,23 @@ template createOperandText(Operand opd)
   end match
 
 end createOperandText;
+
+template createPatternFiles(OperationData modelOperationData)
+::=match modelOperationData
+    case OPERATIONDATA(name=name,linSysPat=linSysPattern) then
+    let text = (linSysPattern |> lsPat as LINSYSPATTERN(adolcIndex=adolcIndex)
+                => textFile(createOnePattern(lsPat), '<%name%>_ls_<%adolcIndex%>_pat.txt'))
+    <<>>
+  end match
+end createPatternFiles;
+
+template createOnePattern(LinSysPattern linSysPat)
+::=match linSysPat
+    case LINSYSPATTERN(adolcIndex=adolcIndex,pattern=pattern) then
+    let text = (pattern |> n as Integer => '<%n%>';separator=" ")
+    << <%text%> >>
+  end match
+end createOnePattern;
 
 annotation(__OpenModelica_Interface="backend");
 end CodegenADOLC;
