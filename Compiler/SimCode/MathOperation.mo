@@ -920,6 +920,7 @@ algorithm
         case (DAE.T_BOOL()) equation
           indexShift = 1 + workingArgs.numRealParameters + workingArgs.numIntParameters;
         then ();
+        case (DAE.T_COMPLEX()) then ();
         else equation
           print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
           Error.addInternalError("getSimVarAndIndex unhandled type!", sourceInfo());
@@ -938,6 +939,7 @@ algorithm
         case (DAE.T_BOOL()) equation
           indexShift = workingArgs.numRealVariables + workingArgs.numIntVariables;
         then ();
+        case (DAE.T_COMPLEX()) then ();
         else equation
           print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
           Error.addInternalError("getSimVarAndIndex unhandled type!", sourceInfo());
@@ -1038,6 +1040,15 @@ algorithm
       WorkingStateArgs workingArgs;
       Boolean isActive;
       constant Boolean debug = false;
+
+    // BCONST
+    case (e1 as DAE.BCONST(false), (opds, ops, workingArgs)) equation
+      opds = OPERAND_CONST(DAE.RCONST(0.0))::opds;
+    then (inExp, (opds, ops, workingArgs));
+    // BCONST
+    case (e1 as DAE.BCONST(true), (opds, ops, workingArgs)) equation
+      opds = OPERAND_CONST(DAE.RCONST(1.0))::opds;
+    then (inExp, (opds, ops, workingArgs));
 
     // ICONST
     case (e1 as DAE.ICONST(), (opds, ops, workingArgs)) equation
@@ -1261,7 +1272,7 @@ algorithm
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::rest;
     then (inExp, (opds, ops, workingArgs));
-
+      
     // CALL, DIVISION
     case (DAE.CALL(path=Absyn.IDENT("DIVISION"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
       op = DAE.DIV(ty);
@@ -1270,6 +1281,48 @@ algorithm
       workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
     then (inExp, (result::rest, ops, workingArgs));
+
+    // noEvent
+    case (DAE.CALL(path=Absyn.IDENT("noEvent")), (opds, ops, workingArgs))
+    then (inExp, (opds, ops, workingArgs));
+    // pre
+    case (DAE.CALL(path=Absyn.IDENT("pre")), (opds, ops, workingArgs))
+    then (inExp, (opds, ops, workingArgs));
+    // smooth
+    case (DAE.CALL(path=Absyn.IDENT("smooth")), (opds, ops, workingArgs))
+      equation
+        _::opds = opds;
+     then (inExp, (opds, ops, workingArgs));
+
+    //TODO: implement
+    // tanh
+    case (DAE.CALL(path=Absyn.IDENT("tanh")), (opds, ops, workingArgs))
+    then (inExp, (opds, ops, workingArgs));
+    // delay
+    case (DAE.CALL(path=Absyn.IDENT("delay")), (opds, ops, workingArgs))
+      equation
+        _::opd1::_::_::opds = opds;
+    then (inExp, (opd1::opds, ops, workingArgs));
+    // min
+    case (DAE.CALL(path=Absyn.IDENT("min")), (opds, ops, workingArgs))
+      equation
+        _::opds = opds;
+    then (inExp, (opds, ops, workingArgs));
+    // max
+    case (DAE.CALL(path=Absyn.IDENT("max")), (opds, ops, workingArgs))
+      equation
+        _::opds = opds;
+    then (inExp, (opds, ops, workingArgs));
+    // semiLinear
+    case (DAE.CALL(path=Absyn.IDENT("semiLinear")), (opds, ops, workingArgs))
+      equation
+        opd1::_::_::opds = opds;
+    then (inExp, (opd1::opds, ops, workingArgs));
+    // sample
+    case (DAE.CALL(path=Absyn.IDENT("sample")), (opds, ops, workingArgs))
+      equation
+        _::_::opds = opds;
+    then (inExp, (opds, ops, workingArgs));
 
     // CALL, tan
     case (DAE.CALL(path=Absyn.IDENT("tan"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs)) equation
@@ -1393,7 +1446,7 @@ algorithm
 
     // Modelica functions
     // CALL
-    case (DAE.CALL(path=path, expLst=expList, attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
+    case (DAE.CALL(path=path, expLst=expList, attr=DAE.CALL_ATTR(ty=ty,builtin=false)), (opds, ops, workingArgs)) equation
       ident = Absyn.pathString(path, "_");
       // check if function exits in workingStatargs funcNames, else append
       if not List.isMemberOnTrue(path, workingArgs.funcNames, Absyn.pathEqual) then
@@ -1681,6 +1734,8 @@ protected function checkRelation
   output MathOperator outOp;
 algorithm
   outOp := match inExp
+     local
+       DAE.Exp e1;
 
     case DAE.RELATION(operator=DAE.GREATEREQ(_))
     then COND_EQ_ASSIGN();
@@ -1708,6 +1763,9 @@ algorithm
 
     case DAE.CREF(ty=DAE.T_BOOL_DEFAULT)
     then COND_ASSIGN();
+
+    case DAE.CALL(path=Absyn.IDENT("noEvent"),expLst={e1})
+    then checkRelation(e1);
 
  end match;
 end checkRelation;
