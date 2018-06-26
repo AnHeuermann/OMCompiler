@@ -1020,17 +1020,18 @@ algorithm
       DAE.ComponentRef cref;
       list<DAE.ComponentRef> crefList;
       SimCode.HashTableCrefToSimVar crefToSimVarHT;
-      SimCodeVar.SimVar resVar, timeVar, paramVar;
+      SimCodeVar.SimVar resVar, resVar2, resVar3, timeVar, paramVar;
       list<Operand> opds, opdList, rest, results;
       list<Operation> ops, tmpOps;
       Operation operation;
       Operand result, firstArg, opd1, opd2, opd3;
+      MathOperator mathop1, mathop2;
       DAE.Exp e1, e2, e3;
       list<DAE.Exp> expList;
       list<DAE.Var> varLst;
       list<DAE.Subscript> subs;
       DAE.Type ty;
-      DAE.Operator op;
+      DAE.Operator op, tmpop;
       Integer tmpIndex;
       Absyn.Ident ident;
       Absyn.Path path;
@@ -1170,12 +1171,45 @@ algorithm
       (operation, result, tmpIndex) = createRelationOperation(op, {opd1,opd2}, workingArgs.tmpIndex);
       ops = operation::ops;
 
-      // result = if result>0 then 1 else 0
       (opds, tmpOps, tmpIndex) = createTmpLogForVals({OPERAND_CONST(DAE.RCONST(1)),OPERAND_CONST(DAE.RCONST(0.0))}, tmpIndex);
       ops = listAppend(tmpOps, ops);
-
       opds = listAppend(result::opds,{OPERAND_CONST(DAE.RCONST(1))});
-      operation = OPERATION(opds, COND_ASSIGN(), result);
+
+      // for EQUAL or NEQUAL
+      if Expression.isEqual(op) or Expression.isNequal(op) then
+
+        result::opd1::opd2::opd3::{} = opds;
+        mathop1 = COND_EQ_ASSIGN();
+        tmpop = DAE.AND(DAE.T_BOOL_DEFAULT);
+
+        if Expression.isNequal(op) then
+          opds = result::opd2::opd1::opd3::{};
+          mathop1 = COND_ASSIGN();
+          tmpop = DAE.OR(DAE.T_BOOL_DEFAULT);
+        end if;
+
+        (resVar, tmpIndex) = createSimTmpVar(tmpIndex, DAE.T_REAL_DEFAULT);
+        operation = OPERATION(opds, mathop1, OPERAND_VAR(resVar));
+        ops = operation::ops;
+
+        _::opds = opds;
+
+        (resVar2, tmpIndex) = createSimTmpVar(tmpIndex, DAE.T_REAL_DEFAULT);
+        operation = OPERATION({result}, UNARY_NEG(), OPERAND_VAR(resVar2));
+        ops = operation::ops;
+
+        (resVar3, tmpIndex) = createSimTmpVar(tmpIndex, DAE.T_REAL_DEFAULT);
+        operation = OPERATION(OPERAND_VAR(resVar2)::opds, mathop1, OPERAND_VAR(resVar3));
+        ops = operation::ops;
+
+        (operation, result, tmpIndex) = createLBinaryOperation(tmpop, { OPERAND_VAR(resVar), OPERAND_VAR(resVar3)}, tmpIndex);
+      else
+
+        // result = if result>0 then 1 else 0
+        operation = OPERATION(opds, COND_ASSIGN(), result);
+      end if;
+
+
       workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
     then (inExp, (result::rest, ops, workingArgs));
@@ -1184,9 +1218,10 @@ algorithm
     case (DAE.LBINARY(operator=op), (opds, ops, workingArgs)) equation
       opd2::opd1::rest = opds;
       (operation, result, tmpIndex) = createLBinaryOperation(op, {opd1,opd2}, workingArgs.tmpIndex);
+      ops = operation::ops;
 
        // result = if result - 1 > 0 then result - 1 else result
-      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, DAE.T_REAL_DEFAULT);
+      (resVar, tmpIndex) = createSimTmpVar(tmpIndex, DAE.T_REAL_DEFAULT);
       opd3 = OPERAND_CONST(DAE.RCONST(-1));
       (_, _, isActive, _) = checkOperand({opd3, result});
       operation = OPERATION({opd3, result}, PLUS(isActive), OPERAND_VAR(resVar));
@@ -1219,10 +1254,10 @@ algorithm
     case (DAE.IFEXP(expCond=e1, expThen=e2, expElse=e3), (opds, ops, workingArgs)) equation
       opd3::opd2::opd1::rest = opds;
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, Expression.typeof(e2));
-      workingArgs.tmpIndex = tmpIndex;
       ({opd1,opd2,opd3}, tmpOps, tmpIndex) = createTmpLogForVals({opd1,opd2,opd3}, tmpIndex);
       ops = listAppend(tmpOps, ops);
       operation = OPERATION({opd1,opd2,opd3,OPERAND_CONST(DAE.RCONST(1))}, checkRelation(e1), OPERAND_VAR(resVar));
+      workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::rest;
     then (inExp, (opds, ops, workingArgs));
@@ -1398,6 +1433,10 @@ algorithm
       ops = operation::ops;
     then (inExp, (result::rest, ops, workingArgs));
 
+    // CAST
+    case (DAE.CAST(exp=e1), (opds, ops, workingArgs))
+    then (inExp, (opds, ops, workingArgs));
+    
     // debug
     case (_, _) guard debug
     equation
@@ -1653,6 +1692,12 @@ algorithm
     then COND_ASSIGN();
 
     case DAE.RELATION(operator=DAE.LESS(_))
+    then COND_ASSIGN();
+
+    case DAE.RELATION(operator=DAE.EQUAL(_))
+    then COND_ASSIGN();
+
+    case DAE.RELATION(operator=DAE.NEQUAL(_))
     then COND_ASSIGN();
 
     case DAE.LBINARY(operator=DAE.AND(_))

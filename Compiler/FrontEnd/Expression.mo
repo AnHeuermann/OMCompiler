@@ -8532,6 +8532,25 @@ algorithm
        end match;
 end isLesseqOrLess;
 
+public function isEqual
+  input DAE.Operator op;
+  output Boolean b;
+algorithm
+  b := match(op)
+       case(DAE.EQUAL()) then true;
+       else false;
+       end match;
+end isEqual;
+
+public function isNequal
+  input DAE.Operator op;
+  output Boolean b;
+algorithm
+  b := match(op)
+       case(DAE.NEQUAL()) then true;
+       else false;
+       end match;
+end isNequal;
 
 public function containVectorFunctioncall
 "Returns true if expression or subexpression is a
