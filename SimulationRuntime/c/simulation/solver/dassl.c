@@ -421,8 +421,10 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
         rt_tick(SIM_TIMER_ADOLC_INIT);
       }
       dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
-      dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal +
-          data->modelData->nVariablesInteger+data->modelData->nParametersInteger)*sizeof(double));
+
+      dasslData->adolcNumParam = 1 + data->modelData->nParametersReal +
+              data->modelData->nParametersInteger+data->modelData->nParametersBoolean;
+      dasslData->adolcParam = (double*) malloc(dasslData->adolcNumParam*sizeof(double));
       dasslData->adolcJacSeed = NULL;
       dasslData->adolcColoredJac = NULL;
 
@@ -653,11 +655,11 @@ int dassl_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
   if (initialParamCopy && dasslData->useAdolc){
     memcpy(dasslData->adolcParam+1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
     /* copy integer value to parameter memory */
-    for(i=0; i<data->modelData->nVariablesInteger; i++){
-      dasslData->adolcParam[1+data->modelData->nParametersReal+i] = (double) data->localData[0]->integerVars[i];
-    }
     for(i=0; i<data->modelData->nParametersInteger; i++){
-      dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nVariablesInteger+i] = (double) data->simulationInfo->integerParameter[i];
+      dasslData->adolcParam[1+data->modelData->nParametersReal+i] = data->simulationInfo->integerParameter[i];
+    }
+    for(i=0; i<data->modelData->nParametersBoolean; i++){
+      dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+i] = data->simulationInfo->booleanParameter[i];
     }
     initialParamCopy = 0;
   }
@@ -1320,7 +1322,7 @@ static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, d
   /* the first argument is the same number as in function name after system */
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
   updateTimeParamLoc(dasslData->adolcParam, *t);
-  set_param_vec(data->simulationInfo->adolcTag, data->modelData->nParametersReal+1 , dasslData->adolcParam);
+  set_param_vec(data->simulationInfo->adolcTag, dasslData->adolcNumParam, dasslData->adolcParam);
 
   //printTapeStats(stderr, data->simulationInfo->adolcTag);
   jacobian(data->simulationInfo->adolcTag, dasslData->N, dasslData->N, y, dasslData->adolcJac);
@@ -1362,7 +1364,7 @@ static int jacobianADOLCColored(double *t, double *y, double *yprime, double *de
   double *result = myalloc1(dasslData->N);
 
   updateTimeParamLoc(dasslData->adolcParam, *t);
-  set_param_vec(data->simulationInfo->adolcTag, data->modelData->nParametersReal+1 , dasslData->adolcParam);
+  set_param_vec(data->simulationInfo->adolcTag, dasslData->adolcNumParam, dasslData->adolcParam);
   fov_forward(data->simulationInfo->adolcTag, dasslData->N, dasslData->N,
               data->simulationInfo->analyticJacobians[index].sparsePattern.maxColors,
               y, dasslData->adolcJacSeed, result, dasslData->adolcColoredJac);
@@ -1410,7 +1412,7 @@ static int JacobianADOLCSparse(double *t, double *y, double *yprime, double *del
   /* the first argument is the same number as in function name after system */
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
   updateTimeParamLoc(dasslData->adolcParam, *t);
-  set_param_vec(data->simulationInfo->adolcTag, data->modelData->nParametersReal+1 , dasslData->adolcParam);
+  set_param_vec(data->simulationInfo->adolcTag, dasslData->adolcNumParam, dasslData->adolcParam);
 
   sparse_jac(data->simulationInfo->adolcTag, dasslData->N, dasslData->N, repeat, y, &nnz,
              &rows, &cols, &values, options);
@@ -1445,7 +1447,7 @@ int functionODE_residualADOLC(double *t, double *y, double *yd, double* cj, doub
   /* the first argument is the same number as in function name after system */
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
   updateTimeParamLoc(dasslData->adolcParam, *t);
-  set_param_vec(0, data->modelData->nParametersReal+1 , dasslData->adolcParam);
+  set_param_vec(0, dasslData->adolcNumParam , dasslData->adolcParam);
 
   /* read input vars */
   externalInputUpdate(data);

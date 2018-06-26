@@ -78,6 +78,7 @@ typedef struct DASSL_DATA{
   double** adolcColoredJac;
 
   double* adolcParam;
+  int adolcNumParam;
   int useAdolc;
 
   /* function pointer of provied functions */

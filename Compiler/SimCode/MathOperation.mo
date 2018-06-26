@@ -160,6 +160,7 @@ protected uniontype WorkingStateArgs
     Integer numRealVariables;
     Integer numIntVariables;
     Integer numRealParameters;
+    Integer numIntParameters;
   end WORKINGSTATEARGS;
 end WorkingStateArgs;
 
@@ -170,7 +171,10 @@ public function createOperationData
   input SimCode.HashTableCrefToSimVar crefToSimVarHT;
   input Integer numRealVariables;
   input Integer numIntVariables;
-  input list<SimCodeVar.SimVar> realParameters; 
+  input Integer numBoolVariables;
+  input list<SimCodeVar.SimVar> realParameters;
+  input list<SimCodeVar.SimVar> intParameters;
+  input list<SimCodeVar.SimVar> boolParameters;
   input String modelName;
   input DAE.FunctionTree functionTree;
   input list<SimCodeVar.SimVar> independents;
@@ -184,12 +188,13 @@ protected
   constant Boolean debug = false;
 algorithm
   try
-    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, numRealVariables, numRealVariables, numIntVariables, listLength(realParameters));
+    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, numRealVariables+numIntVariables+numBoolVariables, numRealVariables, numIntVariables, listLength(realParameters), listLength(intParameters));
 
     if debug then
       print("# Equations: " + intString(listLength(inEquations)) + ".\n");
       SimCodeUtil.dumpSimEqSystemLst(inEquations, "\n");
       print("\n");
+      print("Start of tmpIndex: " + intString(workingArgs.tmpIndex) + "\n");
       print("createOperationData equations input: \n");
       print(Tpl.tplString3(TaskSystemDump.dumpEqs, inEquations, 0, false));
       print("-----\n");
@@ -204,7 +209,7 @@ algorithm
     end if;
 
     // create needed nls systems
-    (opDataNLS, workingArgs) := createOperationDataNLS(workingArgs.nlsSystems, modelName, realParameters, workingArgs);
+    (opDataNLS, workingArgs) := createOperationDataNLS(workingArgs.nlsSystems, modelName, listAppend(listAppend(realParameters, intParameters), boolParameters), workingArgs);
 
     if debug then
       print("\ncreateOperationData for functions: \n");
@@ -219,7 +224,7 @@ algorithm
     tmpOpData := setInDepAndDepVars(independents, dependents, tmpOpData);
 
     tmpOpData.name := modelName;
-    tmpOpData.numRealParameters := 1+listLength(realParameters);
+    tmpOpData.numRealParameters := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters);
 
     if debug then
       print("Created operations for model: " + modelName +
@@ -267,7 +272,7 @@ protected
 algorithm
   // get function for funcName
   // create OperationData for single func
-  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, {}, 0, 0, 0, 0);
+  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, {}, 0, 0, 0, 0, 0);
   while not listEmpty(funcList) loop
     for funcName in funcList loop
 
@@ -303,7 +308,7 @@ algorithm
       localHT := List.fold(protectedSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
       numVars := listLength(inputSimVars) + listLength(outputSimVars) + listLength(protectedSimVars);
 
-      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, {}, numVars, numVars, 0, 0);
+      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, {}, numVars, numVars, 0, 0, 0);
 
       (optData, workingArgs) := createOperationsForFunction(bodyStmts, workingArgs, allFuncList);
 
@@ -420,7 +425,7 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
     numVars := listLength(iterationSimVars)+listLength(resSimVars)+listLength(innerSimVars);    
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(inputSimVars));
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(inputSimVars), 0);
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs);
@@ -471,7 +476,7 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
     
     numVars := listLength(inputSimVars)+listLength(resSimVars)+listLength(innerSimVars);
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(iterationSimVars));
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(iterationSimVars), 0);
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs);
@@ -572,12 +577,14 @@ protected
   Integer maxTmpIndex = inWorkingArgs.numRealVariables;
   list<DAE.Statement> statements;
   list<LinSysPattern> lsPat;
+  Integer tmptmpIndex;
   constant Boolean debug = false;
 algorithm
   try
     operations := {};
     lsPat := {};
     for eq in inEquations loop
+      tmptmpIndex := workingArgs.tmpIndex;
       () := matchcontinue eq
       local
         Integer index, adolcIndex;
@@ -600,10 +607,9 @@ algorithm
         // SIMPLE_ASSIGN
         case SimCode.SES_SIMPLE_ASSIGN(index=index, exp=exp, cref=cref) equation
           //print("collectOperationsForFuncArgs operation : " + ComponentReference.printComponentRefStr(cref) + " = " +  ExpressionDump.printExpStr(exp) +"\n");
-          simVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+          (simVar, _) = getSimVarWithIndexShift(cref, workingArgs);
           simVarOperand = OPERAND_VAR(simVar);
           //print("collectOperationsForFuncArgs assign : ");
-          workingArgs.tmpIndex = workingArgs.numRealVariables;
           ({assignOperand}, operations, workingArgs) = collectOperationsForExp(exp, operations, workingArgs);
           //print("Done with collectOperationsForExp\n");
           if isTmpOperand(assignOperand) then
@@ -653,9 +659,8 @@ algorithm
 
         // ALGORITHM, can also be (y, z) := adolcTest.f(x)
         case SimCode.SES_ALGORITHM(index=index, statements=statements) equation
-          workingArgs.tmpIndex = workingArgs.numRealVariables;
           (tmpOps, workingArgs) = createOperationDataStmts(statements, workingArgs);
-          operations = listAppend(tmpOps, operations); 
+          operations = listAppend(tmpOps, operations);
         then ();
 
         // SES_NONLINEAR
@@ -666,7 +671,7 @@ algorithm
           indexX := workingArgs.tmpIndex;
           i := 0;
           for cr in listReverse(inputCrefs) loop
-            simVar := BaseHashTable.get(cr, workingArgs.crefToSimVarHT);
+            (simVar, _) := getSimVarWithIndexShift(cr, workingArgs);
             op := OPERATION({OPERAND_VAR(simVar)}, ASSIGN_ACTIVE(), OPERAND_INDEX(indexX+i));
             operations := op::operations;
             i := i + 1;
@@ -686,13 +691,11 @@ algorithm
 
           i := 0;
           for cr in listAppend(listReverse(innerCrefs), crefs) loop
-            simVar := BaseHashTable.get(cr, workingArgs.crefToSimVarHT);
+            (simVar, _) := getSimVarWithIndexShift(cr, workingArgs);
             op := OPERATION({OPERAND_INDEX(workingArgs.tmpIndex+i)}, ASSIGN_ACTIVE(), OPERAND_VAR(simVar));
             operations := op::operations;
             i := i + 1;
           end for;
-
-          workingArgs.tmpIndex := indexX;
 
           workingArgs.nlsSystems := nlSystem::workingArgs.nlsSystems;
         then ();
@@ -770,7 +773,7 @@ algorithm
           // assign x = tmpVars
           i := 0;
           for v in vars loop
-            simVar := BaseHashTable.get(v.name, workingArgs.crefToSimVarHT);
+            (simVar, _) := getSimVarWithIndexShift(v.name, workingArgs);
             op := OPERATION({OPERAND_INDEX(indexX+i)}, ASSIGN_ACTIVE(), OPERAND_VAR(simVar));
             operations := op::operations;
 
@@ -790,6 +793,7 @@ algorithm
 
       end matchcontinue;
       maxTmpIndex := intMax(maxTmpIndex, workingArgs.tmpIndex);
+      workingArgs.tmpIndex := tmptmpIndex;
     end for;
     operations := listReverse(operations);
     lsPat := listReverse(lsPat);
@@ -913,6 +917,9 @@ algorithm
         case (DAE.T_INTEGER()) equation
           indexShift = 1 + workingArgs.numRealParameters;
         then ();
+        case (DAE.T_BOOL()) equation
+          indexShift = 1 + workingArgs.numRealParameters + workingArgs.numIntParameters;
+        then ();
         else equation
           print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
           Error.addInternalError("getSimVarAndIndex unhandled type!", sourceInfo());
@@ -922,11 +929,14 @@ algorithm
     then ();
     else algorithm
       _ := match(simVar.type_)
+        case (DAE.T_REAL()) equation
+          indexShift = 0;
+        then ();
         case (DAE.T_INTEGER()) equation 
-          indexShift = 1 + workingArgs.numRealVariables;
+          indexShift = workingArgs.numRealVariables;
         then ();
         case (DAE.T_BOOL()) equation
-          indexShift = 1 + workingArgs.numRealVariables + workingArgs.numIntVariables;
+          indexShift = workingArgs.numRealVariables + workingArgs.numIntVariables;
         then ();
         else equation
           print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
@@ -948,7 +958,7 @@ protected
   SimCodeVar.SimVar simVar;
 algorithm
   cref := Expression.expCref(inExp);
-  simVar := BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+  (simVar, _) := getSimVarWithIndexShift(cref, workingArgs);
   outSimVarOperand := OPERAND_VAR(simVar);
 end generateOperandForExp;
 
@@ -1025,6 +1035,7 @@ algorithm
       Absyn.Ident ident;
       Absyn.Path path;
       WorkingStateArgs workingArgs;
+      Boolean isActive;
       constant Boolean debug = false;
 
     // ICONST
@@ -1050,8 +1061,8 @@ algorithm
     case (DAE.CREF(componentRef=DAE.CREF_QUAL(ident="$START",componentRef=cref),ty=ty), (opds, ops, workingArgs))
     equation
       opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
-      // Start var
-      paramVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+      // Start var;
+      (paramVar, true) = getSimVarWithIndexShift(cref, workingArgs);
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
       operation = OPERATION({OPERAND_INDEX(paramVar.index+(workingArgs.numRealParameters+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
@@ -1073,7 +1084,7 @@ algorithm
 
     // CREF
     case (DAE.CREF(componentRef=cref), (opds, ops, workingArgs)) equation
-      resVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+      (resVar, _) = getSimVarWithIndexShift(cref, workingArgs);
       opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       opds = OPERAND_VAR(resVar)::opds;
       // debug
@@ -1089,7 +1100,7 @@ algorithm
       //print("Start record case: " + ExpressionDump.printExpStr(inExp) + "\n");
       expList = Expression.expandExpression(inExp);
       crefList = list(Expression.expCref(e) for e in expList);
-      opdList = list(OPERAND_VAR(BaseHashTable.get(cr, workingArgs.crefToSimVarHT)) for cr in crefList);
+      opdList = list(OPERAND_VAR(getSimVarWithIndexShift(cr, workingArgs)) for cr in crefList);
       //print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
       opds = listAppend(opdList, opds);
     then fail();
@@ -1099,7 +1110,7 @@ algorithm
     case (DAE.CALL(path=Absyn.IDENT("der")), (opds, ops, workingArgs)) equation
       OPERAND_VAR(resVar)::rest = opds;
       cref = ComponentReference.crefPrefixDer(resVar.name);
-      resVar = BaseHashTable.get(cref, workingArgs.crefToSimVarHT);
+      (resVar, _) = getSimVarWithIndexShift(cref, workingArgs);
       opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       opds = OPERAND_VAR(resVar)::rest;
     then (inExp, (opds, ops, workingArgs));
@@ -1157,6 +1168,14 @@ algorithm
     case (DAE.RELATION(operator=op), (opds, ops, workingArgs)) equation
       opd2::opd1::rest = opds;
       (operation, result, tmpIndex) = createRelationOperation(op, {opd1,opd2}, workingArgs.tmpIndex);
+      ops = operation::ops;
+
+      // result = if result>0 then 1 else 0
+      (opds, tmpOps, tmpIndex) = createTmpLogForVals({OPERAND_CONST(DAE.RCONST(1)),OPERAND_CONST(DAE.RCONST(0.0))}, tmpIndex);
+      ops = listAppend(tmpOps, ops);
+
+      opds = listAppend(result::opds,{OPERAND_CONST(DAE.RCONST(1))});
+      operation = OPERATION(opds, COND_ASSIGN(), result);
       workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
     then (inExp, (result::rest, ops, workingArgs));
@@ -1165,6 +1184,33 @@ algorithm
     case (DAE.LBINARY(operator=op), (opds, ops, workingArgs)) equation
       opd2::opd1::rest = opds;
       (operation, result, tmpIndex) = createLBinaryOperation(op, {opd1,opd2}, workingArgs.tmpIndex);
+
+       // result = if result - 1 > 0 then result - 1 else result
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, DAE.T_REAL_DEFAULT);
+      opd3 = OPERAND_CONST(DAE.RCONST(-1));
+      (_, _, isActive, _) = checkOperand({opd3, result});
+      operation = OPERATION({opd3, result}, PLUS(isActive), OPERAND_VAR(resVar));
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(resVar),OPERAND_VAR(resVar),result,OPERAND_CONST(DAE.RCONST(1))}, COND_ASSIGN(), result);
+
+      workingArgs.tmpIndex = tmpIndex;
+      ops = operation::ops;
+    then (inExp, (result::rest, ops, workingArgs));
+
+    // LUNARY
+    case (DAE.LUNARY(operator=op), (opds, ops, workingArgs)) equation
+      opd1::rest = opds;
+      // res = a - 1
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, DAE.T_REAL_DEFAULT);
+      opd2 = OPERAND_CONST(DAE.RCONST(-1));
+       (_, _, isActive, _) = checkOperand({opd2, opd1});
+      operation = OPERATION({opd2, opd1}, PLUS(isActive), OPERAND_VAR(resVar));
+      ops = operation::ops;
+
+      // res = abs(res)
+      result = OPERAND_VAR(resVar);
+      operation = OPERATION({OPERAND_VAR(resVar)}, UNARY_CALL("abs_val"), OPERAND_VAR(resVar));
+
       workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
     then (inExp, (result::rest, ops, workingArgs));
@@ -1176,7 +1222,7 @@ algorithm
       workingArgs.tmpIndex = tmpIndex;
       ({opd1,opd2,opd3}, tmpOps, tmpIndex) = createTmpLogForVals({opd1,opd2,opd3}, tmpIndex);
       ops = listAppend(tmpOps, ops);
-      operation = OPERATION({opd1,opd2,opd3}, checkRelation(e1), OPERAND_VAR(resVar));
+      operation = OPERATION({opd1,opd2,opd3,OPERAND_CONST(DAE.RCONST(1))}, checkRelation(e1), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::rest;
     then (inExp, (opds, ops, workingArgs));
@@ -1613,6 +1659,9 @@ algorithm
     then COND_ASSIGN();
 
     case DAE.LBINARY(operator=DAE.OR(_))
+    then COND_ASSIGN();
+
+    case DAE.CREF(ty=DAE.T_BOOL_DEFAULT)
     then COND_ASSIGN();
 
  end match;
