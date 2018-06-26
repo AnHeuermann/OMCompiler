@@ -905,23 +905,12 @@ protected
 algorithm
   simVar := BaseHashTable.get(inCref, workingArgs.crefToSimVarHT);
   _ := match(simVar.varKind)
-    case (BackendDAE.DISCRETE()) algorithm
-      _ := match(simVar.type_)
-        case (DAE.T_INTEGER()) equation 
-          indexShift = 1 + workingArgs.numRealVariables;
-        then ();
-        else equation
-          print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
-          Error.addInternalError("getSimVarAndIndex unhandled type!", sourceInfo());
-        then fail();
-      end match;
-    then ();
     case (BackendDAE.PARAM()) algorithm
       _ := match(simVar.type_)
-        case (DAE.T_REAL()) equation 
+        case (DAE.T_REAL()) equation
           indexShift = 1;
-        then (); 
-        case (DAE.T_INTEGER()) equation 
+        then ();
+        case (DAE.T_INTEGER()) equation
           indexShift = 1 + workingArgs.numRealParameters;
         then ();
         else equation
@@ -931,16 +920,20 @@ algorithm
       end match;
       handleAsParameter := true;
     then ();
-    case (BackendDAE.VARIABLE()) then ();
-    case (BackendDAE.TMP_SIMVAR()) then ();
-    case (BackendDAE.STATE()) then ();
-    case (BackendDAE.STATE_DER()) then ();
-    case (BackendDAE.DUMMY_DER()) then ();
-    case (BackendDAE.DUMMY_STATE()) then ();
-    else equation
-      print("SimVar : " + SimCodeUtil.simVarString(simVar) + "\n");
-      Error.addInternalError("getSimVarAndIndex failed", sourceInfo());
-    then fail();
+    else algorithm
+      _ := match(simVar.type_)
+        case (DAE.T_INTEGER()) equation 
+          indexShift = 1 + workingArgs.numRealVariables;
+        then ();
+        case (DAE.T_BOOL()) equation
+          indexShift = 1 + workingArgs.numRealVariables + workingArgs.numIntVariables;
+        then ();
+        else equation
+          print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
+          Error.addInternalError("getSimVarAndIndex unhandled type!", sourceInfo());
+        then fail();
+      end match;
+    then ();
   end match;
   simVar.index := indexShift + simVar.index;
 end getSimVarWithIndexShift;
