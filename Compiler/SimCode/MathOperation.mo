@@ -1022,7 +1022,7 @@ algorithm
       DAE.ComponentRef cref;
       list<DAE.ComponentRef> crefList;
       SimCode.HashTableCrefToSimVar crefToSimVarHT;
-      SimCodeVar.SimVar resVar, resVar2, resVar3, timeVar, paramVar;
+      SimCodeVar.SimVar resVar, resVar2, resVar3, timeVar, paramVar, tmpVar, tmpVar2;
       list<Operand> opds, opdList, rest, results;
       list<Operation> ops, tmpOps;
       Operation operation;
@@ -1295,9 +1295,6 @@ algorithm
      then (inExp, (opds, ops, workingArgs));
 
     //TODO: implement
-    // tanh
-    case (DAE.CALL(path=Absyn.IDENT("tanh")), (opds, ops, workingArgs))
-    then (inExp, (opds, ops, workingArgs));
     // delay
     case (DAE.CALL(path=Absyn.IDENT("delay")), (opds, ops, workingArgs))
       equation
@@ -1324,6 +1321,98 @@ algorithm
         _::_::opds = opds;
     then (inExp, (opds, ops, workingArgs));
 
+    // CALL, sinh
+    case (DAE.CALL(path=Absyn.IDENT("sinh"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
+      opd1::rest = opds;
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      result = OPERAND_VAR(resVar);
+      (tmpVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      operation = OPERATION({opd1}, UNARY_NEG(), OPERAND_VAR(tmpVar));
+      ops = operation::ops;
+      (resVar2, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      (resVar3, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      opd2 = OPERAND_VAR(resVar2);
+      opd3 = OPERAND_VAR(resVar3);
+      operation = OPERATION({opd1}, UNARY_CALL("exp"), opd2);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar)}, UNARY_CALL("exp"), opd3);
+      ops = operation::ops;
+      operation = OPERATION({opd3}, UNARY_NEG(), opd3);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar),opd2,opd3,OPERAND_CONST(DAE.RCONST(1.0))}, COND_ASSIGN(), OPERAND_VAR(tmpVar));
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar),OPERAND_CONST(DAE.RCONST(-1.0))}, DIV(false), opd2);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar),opd2}, PLUS(true), opd3);
+      ops = operation::ops;
+      operation = OPERATION({opd3,OPERAND_CONST(DAE.RCONST(0.5))}, MUL(false), result);
+      ops = operation::ops;
+      workingArgs.tmpIndex = tmpIndex;
+    then (inExp, (result::rest, ops, workingArgs));
+    // CALL, cosh
+    case (DAE.CALL(path=Absyn.IDENT("cosh"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
+      opd1::rest = opds;
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      result = OPERAND_VAR(resVar);
+      (tmpVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      operation = OPERATION({opd1}, UNARY_NEG(), OPERAND_VAR(tmpVar));
+      ops = operation::ops;
+      (resVar2, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      (resVar3, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      opd2 = OPERAND_VAR(resVar2);
+      opd3 = OPERAND_VAR(resVar3);
+      operation = OPERATION({opd1}, UNARY_CALL("exp"), opd2);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar)}, UNARY_CALL("exp"), opd3);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar),opd2,opd3,OPERAND_CONST(DAE.RCONST(1.0))}, COND_ASSIGN(), OPERAND_VAR(tmpVar));
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar),OPERAND_CONST(DAE.RCONST(1.0))}, DIV(false), opd2);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar),opd2}, PLUS(true), opd3);
+      ops = operation::ops;
+      operation = OPERATION({opd3,OPERAND_CONST(DAE.RCONST(0.5))}, MUL(false), result);
+      ops = operation::ops;
+      workingArgs.tmpIndex = tmpIndex;
+     then (inExp, (result::rest, ops, workingArgs));
+    // CALL, tanh
+    case (DAE.CALL(path=Absyn.IDENT("tanh"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
+      opd1::rest = opds;
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      result = OPERAND_VAR(resVar);
+      opd1::rest = opds;
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      result = OPERAND_VAR(resVar);
+      (tmpVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      operation = OPERATION({opd1}, UNARY_NEG(), OPERAND_VAR(tmpVar));
+      ops = operation::ops;
+      (tmpVar2, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      (resVar2, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      (resVar3, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+      opd2 = OPERAND_VAR(resVar2);
+      opd3 = OPERAND_VAR(resVar3);
+      operation = OPERATION({opd1,OPERAND_CONST(DAE.RCONST(2.0))}, MUL(false), opd2);
+      ops = operation::ops;
+      operation = OPERATION({opd2}, UNARY_NEG(), opd3);
+      ops = operation::ops;
+      operation = OPERATION({opd2}, UNARY_CALL("exp"), opd2);
+      ops = operation::ops;
+      operation = OPERATION({opd3}, UNARY_CALL("exp"), opd3);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar),opd2,opd3,OPERAND_CONST(DAE.RCONST(1.0))}, COND_ASSIGN(), OPERAND_VAR(tmpVar2));
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar2),OPERAND_CONST(DAE.RCONST(-1.0))}, PLUS(false), opd2);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar2),OPERAND_CONST(DAE.RCONST(1.0))}, MINUS(false), opd3);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar),opd2,opd3,OPERAND_CONST(DAE.RCONST(1.0))}, COND_ASSIGN(), opd2);
+      ops = operation::ops;
+      operation = OPERATION({OPERAND_VAR(tmpVar2),OPERAND_CONST(DAE.RCONST(1.0))}, PLUS(false), opd3);
+      ops = operation::ops;
+      operation = OPERATION({opd2,opd3}, DIV(true), result);
+      ops = operation::ops;
+      workingArgs.tmpIndex = tmpIndex;
+    then (inExp, (result::rest, ops, workingArgs));
     // CALL, tan
     case (DAE.CALL(path=Absyn.IDENT("tan"), attr=DAE.CALL_ATTR(builtin=true, ty=ty)), (opds, ops, workingArgs)) equation
       opd1::rest = opds;
