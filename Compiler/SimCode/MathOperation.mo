@@ -1318,7 +1318,7 @@ algorithm
       result = OPERAND_VAR(resVar);
       (opdList, tmpOps, tmpIndex) = createTmpLogForVals({opd1,opd2}, tmpIndex);
       ops = listAppend(tmpOps, ops);
-      operation = OPERATION(opdList, UNARY_CALL("min"),result);
+      operation = OPERATION(listAppend(opdList,{OPERAND_CONST(DAE.RCONST(1.0))}), UNARY_CALL("min"),result);
       ops = operation::ops;
       workingArgs.tmpIndex = tmpIndex;
     then (inExp, (result::rest, ops, workingArgs));
@@ -1331,7 +1331,7 @@ algorithm
       ops = listAppend(tmpOps, ops);
       (opdList, tmpOps, tmpIndex) = negateAllOperands(opdList, tmpIndex, ty);
       ops = listAppend(tmpOps, ops);
-      operation = OPERATION(opdList, UNARY_CALL("min"), result);
+      operation = OPERATION(listAppend(opdList,{OPERAND_CONST(DAE.RCONST(1.0))}), UNARY_CALL("min"), result);
       ops = operation::ops;
       operation = OPERATION({result}, UNARY_NEG(), result);
       ops = operation::ops;
