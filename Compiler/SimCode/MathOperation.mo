@@ -1025,7 +1025,7 @@ algorithm
       SimCodeVar.SimVar resVar, resVar2, resVar3, timeVar, paramVar, tmpVar, tmpVar2;
       list<Operand> opds, opdList, rest, results;
       list<Operation> ops, tmpOps;
-            Operation operation;
+      Operation operation;
       Operand result, firstArg, opd1, opd2, opd3;
       MathOperator mathop1, mathop2;
       DAE.Exp e1, e2, e3;
