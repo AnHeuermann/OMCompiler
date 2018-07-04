@@ -1025,7 +1025,7 @@ algorithm
       SimCodeVar.SimVar resVar, resVar2, resVar3, timeVar, paramVar, tmpVar, tmpVar2;
       list<Operand> opds, opdList, rest, results;
       list<Operation> ops, tmpOps;
-      Operation operation;
+            Operation operation;
       Operand result, firstArg, opd1, opd2, opd3;
       MathOperator mathop1, mathop2;
       DAE.Exp e1, e2, e3;
@@ -1300,16 +1300,6 @@ algorithm
       equation
         _::opd1::_::_::opds = opds;
     then (inExp, (opd1::opds, ops, workingArgs));
-    // min
-    case (DAE.CALL(path=Absyn.IDENT("min")), (opds, ops, workingArgs))
-      equation
-        _::opds = opds;
-    then (inExp, (opds, ops, workingArgs));
-    // max
-    case (DAE.CALL(path=Absyn.IDENT("max")), (opds, ops, workingArgs))
-      equation
-        _::opds = opds;
-    then (inExp, (opds, ops, workingArgs));
     // semiLinear
     case (DAE.CALL(path=Absyn.IDENT("semiLinear")), (opds, ops, workingArgs))
       equation
@@ -1321,6 +1311,32 @@ algorithm
         _::_::opds = opds;
     then (inExp, (opds, ops, workingArgs));
 
+    // CALL, min of two arguments
+    case (DAE.CALL(path=Absyn.IDENT("min"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
+      opd1::opd2::rest = opds;
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      result = OPERAND_VAR(resVar);
+      (opdList, tmpOps, tmpIndex) = createTmpLogForVals({opd1,opd2}, tmpIndex);
+      ops = listAppend(tmpOps, ops);
+      operation = OPERATION(opdList, UNARY_CALL("min"),result);
+      ops = operation::ops;
+      workingArgs.tmpIndex = tmpIndex;
+    then (inExp, (result::rest, ops, workingArgs));
+    // CALL, max of two arguments
+    case (DAE.CALL(path=Absyn.IDENT("max"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
+      opd1::opd2::rest = opds;
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
+      result = OPERAND_VAR(resVar);
+      (opdList, tmpOps, tmpIndex) = createTmpLogForVals({opd1,opd2}, tmpIndex);
+      ops = listAppend(tmpOps, ops);
+      (opdList, tmpOps, tmpIndex) = negateAllOperands(opdList, tmpIndex, ty);
+      ops = listAppend(tmpOps, ops);
+      operation = OPERATION(opdList, UNARY_CALL("min"), result);
+      ops = operation::ops;
+      operation = OPERATION({result}, UNARY_NEG(), result);
+      ops = operation::ops;
+      workingArgs.tmpIndex = tmpIndex;
+    then (inExp, (result::rest, ops, workingArgs));
     // CALL, sinh
     case (DAE.CALL(path=Absyn.IDENT("sinh"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
       opd1::rest = opds;
@@ -1721,6 +1737,25 @@ algorithm
 
   (op, result, outIndex) := createBinaryOperation(newop, {opd2,opd1}, inIndex);
 end createLBinaryOperation;
+
+protected function negateAllOperands
+  input list<Operand> inOpds;
+  input Integer inIndex;
+  input DAE.Type ty;
+  output list<Operand> outOpds = {};
+  output list<Operation> extraOps = {};
+  output Integer nextIndex = inIndex;
+protected
+   SimCodeVar.SimVar simVar;
+   Operand opd;
+algorithm
+   for opd in inOpds loop
+     (simVar, nextIndex) := createSimTmpVar(nextIndex, ty);
+     extraOps := OPERATION({opd}, UNARY_NEG(), OPERAND_VAR(simVar))::extraOps;
+     outOpds := OPERAND_VAR(simVar)::outOpds;
+   end for;
+   outOpds := listReverse(outOpds);
+end negateAllOperands;
 
 protected function createSimTmpVar
  input Integer inIndex;
