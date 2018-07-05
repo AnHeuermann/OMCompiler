@@ -983,14 +983,16 @@ protected
   Operation op;
   Boolean first = true;
   list<Operand> tmpOpds;
+  list<DAE.Exp> exptmpLst;
 algorithm
   argsIndex := workingArgs.tmpIndex;
-  workingArgs.tmpIndex := workingArgs.tmpIndex + listLength(inExpLst);
-  tmpOpds := listReverse(List.firstN(outOpds, listLength(inExpLst)));
-  outOpds := List.stripN(outOpds, listLength(inExpLst));
+  exptmpLst := List.mapFlat(inExpLst,Expression.flattenArrayExpToList);
+  workingArgs.tmpIndex := workingArgs.tmpIndex + listLength(exptmpLst);
+  tmpOpds := listReverse(List.firstN(outOpds, listLength(exptmpLst)));
+  outOpds := List.stripN(outOpds, listLength(exptmpLst));
 
 
-  for exp in inExpLst loop
+  for exp in exptmpLst loop
     assignOperand::tmpOpds := tmpOpds;
     (simVar, argsIndex) := createSimTmpVar(argsIndex, Expression.typeof(exp));
     simVarOperand := OPERAND_VAR(simVar);
@@ -1108,9 +1110,10 @@ algorithm
       //print("res Var cref: " + printOperandListStr(opds) + "\n");
     then (inExp, (opds, ops, workingArgs));
 
-    // CREF, records
+    // CREF, array or record
     case (DAE.CREF(componentRef=cref), (opds, ops, workingArgs))
-      guard Expression.isRecordType(ComponentReference.crefType(cref))
+      guard (Expression.isRecordType(ComponentReference.crefType(cref)) or
+             Expression.isArrayType(ComponentReference.crefType(cref)))
     equation
       //print("Start record case: " + ExpressionDump.printExpStr(inExp) + "\n");
       expList = Expression.expandExpression(inExp);
