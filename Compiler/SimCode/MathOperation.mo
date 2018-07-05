@@ -581,7 +581,7 @@ protected
   list<DAE.Statement> statements;
   list<LinSysPattern> lsPat;
   Integer tmptmpIndex;
-  constant Boolean debug = false;
+  constant Boolean debug = true;
 algorithm
   try
     operations := {};
@@ -609,12 +609,12 @@ algorithm
 
         // SIMPLE_ASSIGN
         case SimCode.SES_SIMPLE_ASSIGN(index=index, exp=exp, cref=cref) equation
-          //print("collectOperationsForFuncArgs operation : " + ComponentReference.printComponentRefStr(cref) + " = " +  ExpressionDump.printExpStr(exp) +"\n");
+          print("createOperationEqns operation : " + ComponentReference.printComponentRefStr(cref) + " = " +  ExpressionDump.printExpStr(exp) +"\n");
           (simVar, _) = getSimVarWithIndexShift(cref, workingArgs);
           simVarOperand = OPERAND_VAR(simVar);
-          //print("collectOperationsForFuncArgs assign : ");
+          //print("createOperationEqns assign : ");
           ({assignOperand}, operations, workingArgs) = collectOperationsForExp(exp, operations, workingArgs);
-          //print("Done with collectOperationsForExp\n");
+          print("Done with collectOperationsForExp\n");
           if isTmpOperand(assignOperand) then
             op::rest = operations;
             op = replaceOperationResult(op, simVarOperand);
@@ -623,7 +623,7 @@ algorithm
             op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
             operations = op::operations;
           end if;
-          //print("collectOperationsForFuncArgs operation : " +  printOperationStr(op) +"\n");
+          print("createOperationEqns operation : " +  printOperationStr(op) +"\n");
         then ();
 
         case SimCode.SES_RESIDUAL() equation
@@ -1042,7 +1042,7 @@ algorithm
       Absyn.Path path;
       WorkingStateArgs workingArgs;
       Boolean isActive;
-      constant Boolean debug = false;
+      constant Boolean debug = true;
 
     // BCONST
     case (e1 as DAE.BCONST(false), (opds, ops, workingArgs)) equation
@@ -1573,12 +1573,12 @@ algorithm
       if not List.isMemberOnTrue(path, workingArgs.funcNames, Absyn.pathEqual) then
         workingArgs.funcNames = path::workingArgs.funcNames;
       end if;
-      //print("collectOperationsForFuncArgs pre opds : " +  printOperandListStr(opds) +"\n");
+      print("collectOperationsForFuncArgs pre opds : " +  printOperandListStr(opds) +"\n");
 
       // process all call armugments by with expList
-      //print("collectOperationsForFuncArgs for : " + ExpressionDump.printExpListStr(expList) +"\n");
+      print("collectOperation FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
       (firstArg, opds, ops, workingArgs) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
-      //print("collectOperationsForFuncArgs opds : " +  printOperandListStr(opds) +"\n");
+      print("collectOperation FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
 
       (results, tmpIndex) = createOperandVarLst(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
@@ -1593,7 +1593,7 @@ algorithm
         print("Type   = " + Types.printTypeStr(ty) + ".\n");
       end if;
       operation = OPERATION({firstArg, OPERAND_INDEX(listLength(expList)), OPERAND_INDEX(tmpIndex)}, MODELICA_CALL(ident), result);
-      //print("collectOperationsForFuncArgs operation : " +  printOperationStr(operation) +"\n");
+      print("collectOperation operation : " +  printOperationStr(operation) +"\n");
       ops = operation::ops;
     then (inExp, (opds, ops, workingArgs));
 
@@ -1616,10 +1616,10 @@ algorithm
     equation
       print("Dump not handled exp : " + ExpressionDump.printExpStr(inExp) + "\n");
       print(ExpressionDump.dumpExpStr(inExp, 0) + "\n");
-    then (inExp, inTpl);
+    then fail();
 
     else
-      (inExp, inTpl);
+    then fail();
   end matchcontinue;
   //print("ready collectOperation\n");
 end collectOperation;
