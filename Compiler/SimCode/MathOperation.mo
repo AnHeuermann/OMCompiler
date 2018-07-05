@@ -271,7 +271,7 @@ protected
   OperationData optData;
   list<Integer> tmpLst;
 
-  constant Boolean debug = false;
+  constant Boolean debug = true;
 algorithm
   // get function for funcName
   // create OperationData for single func

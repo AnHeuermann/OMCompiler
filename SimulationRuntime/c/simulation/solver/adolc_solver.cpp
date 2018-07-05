@@ -884,6 +884,7 @@ unsigned int alloc_adolc_lin_sol(char* fname, int nnz, int nb, int nx) {
     outsz[0] = nx;
     linSolEdfVec.emplace_back(fname,nnz,nb,nx);
     linSolEdfVec.back().allocate_mem(2,1,insz,outsz);
+    printf("alloc_adolc_lin_sol %s  %d\n", fname, linSolEdfVec.back().get_index());
     return linSolEdfVec.back().get_index();
 }
 
