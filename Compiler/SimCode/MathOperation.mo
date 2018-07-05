@@ -99,6 +99,9 @@ public uniontype MathOperator
   record UNARY_CALL
     Absyn.Ident ident;
   end UNARY_CALL;
+  record UNARY_VERB_CALL
+    Absyn.Ident ident;
+  end UNARY_VERB_CALL;
   record MODELICA_CALL
     Absyn.Ident ident;
   end MODELICA_CALL;
@@ -1255,7 +1258,7 @@ algorithm
 
       // res = abs(res)
       result = OPERAND_VAR(resVar);
-      operation = OPERATION({OPERAND_VAR(resVar)}, UNARY_CALL("abs_val"), OPERAND_VAR(resVar));
+      operation = OPERATION({OPERAND_VAR(resVar)}, UNARY_VERB_CALL("abs_val"), OPERAND_VAR(resVar));
 
       workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
@@ -2136,6 +2139,9 @@ algorithm
 
     case UNARY_CALL(ident)
     then ident + "_op";
+
+    case UNARY_VERB_CALL(ident)
+    then ident;
 
     case MODELICA_CALL(ident)
     then "call fname:\"" + ident + "_aat.txt\"";
