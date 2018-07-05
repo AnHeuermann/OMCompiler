@@ -1294,22 +1294,35 @@ algorithm
         _::opds = opds;
      then (inExp, (opds, ops, workingArgs));
 
-    //TODO: implement
     // delay
     case (DAE.CALL(path=Absyn.IDENT("delay")), (opds, ops, workingArgs))
       equation
         _::opd1::_::_::opds = opds;
     then (inExp, (opd1::opds, ops, workingArgs));
-    // semiLinear
-    case (DAE.CALL(path=Absyn.IDENT("semiLinear")), (opds, ops, workingArgs))
-      equation
-        opd1::_::_::opds = opds;
-    then (inExp, (opd1::opds, ops, workingArgs));
+
     // sample
     case (DAE.CALL(path=Absyn.IDENT("sample")), (opds, ops, workingArgs))
       equation
         _::_::opds = opds;
     then (inExp, (opds, ops, workingArgs));
+
+    // semiLinear: if x>=0 then a*x else b*x
+    case (DAE.CALL(path=Absyn.IDENT("semiLinear"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs))
+      equation
+        opd1::opd2::opd3::opds = opds;
+
+        (operation, opd2, tmpIndex) = createBinaryOperation(DAE.MUL(ty), {opd1, opd2}, workingArgs.tmpIndex);
+        ops = operation::ops;
+        (operation, opd3, tmpIndex) = createBinaryOperation(DAE.MUL(ty), {opd1, opd3}, tmpIndex);
+        ops = operation::ops;
+
+        (resVar, tmpIndex) = createSimTmpVar(tmpIndex, ty);
+        result = OPERAND_VAR(resVar);
+        operation = OPERATION({opd1,opd2,opd3,OPERAND_CONST(DAE.RCONST(1))}, COND_EQ_ASSIGN(), result);
+        ops = operation::ops;
+
+        workingArgs.tmpIndex = tmpIndex;
+    then (inExp, (result::opds, ops, workingArgs));
 
     // CALL, min of two arguments
     case (DAE.CALL(path=Absyn.IDENT("min"), attr=DAE.CALL_ATTR(ty=ty)), (opds, ops, workingArgs)) equation
