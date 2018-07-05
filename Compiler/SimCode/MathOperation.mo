@@ -1300,6 +1300,25 @@ algorithm
         _::opds = opds;
      then (inExp, (opds, ops, workingArgs));
 
+    // sum
+    case (DAE.CALL(path=Absyn.IDENT("sum"), expLst={e1}), (opds, ops, workingArgs))
+      algorithm
+        try
+          expList := Expression.expandExpression(e1);
+        else
+          expList := {e1};
+        end try;
+        expList := List.mapFlat(expList,Expression.flattenArrayExpToList);
+        opdList := listReverse(List.firstN(opds, listLength(expList)));
+        opds := List.stripN(opds, listLength(expList));
+
+        (tmpOps, result, tmpIndex) := createSumProductOperation(DAE.ADD(DAE.T_REAL_DEFAULT), opdList, workingArgs.tmpIndex);
+
+        workingArgs.tmpIndex := tmpIndex;
+        ops := listAppend(tmpOps, ops);
+
+    then (inExp, (result::opds, ops, workingArgs));
+
     // delay
     case (DAE.CALL(path=Absyn.IDENT("delay")), (opds, ops, workingArgs))
       equation
@@ -1613,7 +1632,7 @@ algorithm
     // CAST
     case (DAE.CAST(exp=e1), (opds, ops, workingArgs))
     then (inExp, (opds, ops, workingArgs));
-    
+
     // debug
     case (_, _) guard debug
     equation
@@ -1645,6 +1664,36 @@ algorithm
     else 1;
   end match;
 end numResults;
+
+protected function createSumProductOperation
+  input DAE.Operator operator_;
+  input list<Operand> inOpds;
+  input Integer inIndex;
+  output list<Operation> op = {};
+  output Operand result;
+  output Integer outIndex;
+protected
+  SimCodeVar.SimVar resVar;
+  Operand opd1;
+  list<Operand> rest, opds;
+
+  Boolean isActive, isCommuted;
+  MathOperator math_op;
+algorithm
+
+  opd1::rest := inOpds;
+
+  (resVar, outIndex) := createSimTmpVar(inIndex, DAE.T_REAL_DEFAULT);
+  result := OPERAND_VAR(resVar);
+
+  op := OPERATION({opd1}, ASSIGN_ACTIVE(), result)::op;
+
+  for opd in rest loop
+    (opds, _, isActive, isCommuted) := checkOperand({result, opd});
+    math_op := match operator_ case DAE.ADD() then PLUS(isActive); case DAE.MUL() then MUL(isActive); end match;
+    op := OPERATION(opds, math_op, result)::op;
+  end for;
+end createSumProductOperation;
 
 protected function createBinaryOperation
   input DAE.Operator operator;
