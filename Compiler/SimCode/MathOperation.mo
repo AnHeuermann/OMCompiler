@@ -620,7 +620,15 @@ algorithm
             op = replaceOperationResult(op, simVarOperand);
             operations = op::rest;
           else
-            op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+            op = match assignOperand
+              case OPERAND_VAR()
+              then OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+              case OPERAND_CONST()
+              then OPERATION({assignOperand}, ASSIGN_PASSIVE(), simVarOperand);
+              else equation
+                Error.addInternalError("createOperationEqns failed with arg: " + ExpressionDump.printExpStr(exp) + "\n", sourceInfo());
+              then fail();
+            end match;
             operations = op::operations;
           end if;
           print("createOperationEqns operation : " +  printOperationStr(op) +"\n");
@@ -976,6 +984,7 @@ protected function collectOperationsForFuncArgs
   output list<Operand> outOpds = inOpds;
   output list<Operation> outOps = inOps;
   output WorkingStateArgs workingArgs = inWorkingArgs;
+  output Integer numArgs;
 protected
   Integer tmpIndex, argsIndex;
   SimCodeVar.SimVar simVar;
@@ -987,16 +996,28 @@ protected
 algorithm
   argsIndex := workingArgs.tmpIndex;
   exptmpLst := List.mapFlat(inExpLst,Expression.flattenArrayExpToList);
-  workingArgs.tmpIndex := workingArgs.tmpIndex + listLength(exptmpLst);
-  tmpOpds := listReverse(List.firstN(outOpds, listLength(exptmpLst)));
-  outOpds := List.stripN(outOpds, listLength(exptmpLst));
+  numArgs := listLength(exptmpLst);
+  workingArgs.tmpIndex := workingArgs.tmpIndex + numArgs;
+  tmpOpds := listReverse(List.firstN(outOpds, numArgs));
+  outOpds := List.stripN(outOpds, numArgs);
 
 
   for exp in exptmpLst loop
     assignOperand::tmpOpds := tmpOpds;
     (simVar, argsIndex) := createSimTmpVar(argsIndex, Expression.typeof(exp));
     simVarOperand := OPERAND_VAR(simVar);
-    op := OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+    //print("collectOperationsForFuncArgs exp: " + ExpressionDump.printExpListStr({exp}) + " operand: " + printOperandStr(assignOperand) +"\n");
+    op := match assignOperand
+      case OPERAND_VAR()
+      then OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+      case OPERAND_CONST()
+      then OPERATION({assignOperand}, ASSIGN_PASSIVE(), simVarOperand);
+      case OPERAND_TIME()
+      then OPERATION({assignOperand}, ASSIGN_PARAM(), simVarOperand);
+      else equation
+        Error.addInternalError("collectOperationsForFuncArgs failed with args: " + ExpressionDump.printExpListStr(exptmpLst) + "\n", sourceInfo());
+      then fail();
+    end match;
     outOps := op::outOps;
     if first then
       firstArgument := simVarOperand;
@@ -1039,7 +1060,7 @@ algorithm
       list<DAE.Subscript> subs;
       DAE.Type ty;
       DAE.Operator op, tmpop;
-      Integer tmpIndex;
+      Integer tmpIndex, numArgs;
       Absyn.Ident ident;
       Absyn.Path path;
       WorkingStateArgs workingArgs;
@@ -1599,7 +1620,7 @@ algorithm
 
       // process all call armugments by with expList
       print("collectOperation FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
-      (firstArg, opds, ops, workingArgs) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
+      (firstArg, opds, ops, workingArgs, numArgs) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
       print("collectOperation FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
 
       (results, tmpIndex) = createOperandVarLst(workingArgs.tmpIndex, ty);
@@ -1614,7 +1635,7 @@ algorithm
         print("numRes = " + intString(tmpIndex) + ".\n");
         print("Type   = " + Types.printTypeStr(ty) + ".\n");
       end if;
-      operation = OPERATION({firstArg, OPERAND_INDEX(listLength(expList)), OPERAND_INDEX(tmpIndex)}, MODELICA_CALL(ident), result);
+      operation = OPERATION({firstArg, OPERAND_INDEX(numArgs), OPERAND_INDEX(tmpIndex)}, MODELICA_CALL(ident), result);
       print("collectOperation operation : " +  printOperationStr(operation) +"\n");
       ops = operation::ops;
     then (inExp, (opds, ops, workingArgs));
