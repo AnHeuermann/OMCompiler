@@ -32,7 +32,7 @@
  */
 
 #include <string.h>
-#include <vector>
+#include <forward_list>
 #include <adolc/edfclasses.h>
 #include <adolc/taping.h>
 #include <adolc/interfaces.h>
@@ -72,6 +72,8 @@ int dgemm_(char* transa, char* transb, int* m, int* n, int* k, double* alpha,
            double* a, int* lda, double* b, int* ldb, double* beta, double* c, 
            int* ldc);
 }
+
+ext_diff_fct_v2 *get_ext_diff_fct_v2( int index );
 
 static void printvec(const char* name, int m, double* v) {
     int i,j;
@@ -149,7 +151,7 @@ public:
     virtual int fov_reverse(int iArrLen, int* iArr, int nout, int nin, int *outsz, int dir, double ***Up, int *insz, double ***Zp, double **x, double **y, void* ctx);
 };
 
-static std::vector<LinearSolverEdf> linSolEdfVec;
+static std::forward_list<LinearSolverEdf> linSolEdfVec;
 
 int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
 
@@ -446,7 +448,7 @@ public:
     friend int wrapper_fvec_newton_adolc(int* n, double* x, double* fvec, void* userdata, int fj);
 };
 
-static std::vector<NonLinearSolverEdf> nonLinSolEdfVec;
+static std::forward_list<NonLinearSolverEdf> nonLinSolEdfVec;
 
 NonLinearSolverEdf::~NonLinearSolverEdf() {
 	free(tmp);
@@ -882,10 +884,11 @@ unsigned int alloc_adolc_lin_sol(char* fname, int nnz, int nb, int nx) {
     insz[0] = nnz;
     insz[1] = nb;
     outsz[0] = nx;
-    linSolEdfVec.emplace_back(fname,nnz,nb,nx);
-    linSolEdfVec.back().allocate_mem(2,1,insz,outsz);
-    printf("alloc_adolc_lin_sol %s  %d\n", fname, linSolEdfVec.back().get_index());
-    return linSolEdfVec.back().get_index();
+    linSolEdfVec.emplace_front(fname,nnz,nb,nx);
+    LinearSolverEdf& edf = linSolEdfVec.front();
+    edf.allocate_mem(2,1,insz,outsz);
+    printf("alloc_adolc_lin_sol %s  %d\n", fname, edf.get_index());
+    return edf.get_index();
 }
 
 unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny1, int ny2,short* usetag) {
@@ -893,8 +896,8 @@ unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny1, int ny2,short* 
     insz[0] = nx;
     outsz[0] = ny1;
     outsz[1] = ny2;
-    nonLinSolEdfVec.emplace_back(fbase,*usetag);
-    NonLinearSolverEdf& edf = nonLinSolEdfVec.back();
+    nonLinSolEdfVec.emplace_front(fbase,*usetag);
+    NonLinearSolverEdf& edf = nonLinSolEdfVec.front();
     edf.allocate_mem(1,2,insz,outsz);
     *usetag = edf.get_next_tag();
     edf.numIterVar = outsz[1];
@@ -907,6 +910,7 @@ unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny1, int ny2,short* 
 }
 
 double *adolc_nonlin_sol_get_values_buffer(int index) {
-	NonLinearSolverEdf& edf = nonLinSolEdfVec[index];
-	return edf.data->x;
+    ext_diff_fct_v2* estruct = get_ext_diff_fct_v2(index);
+    NonLinearSolverEdf* edf = reinterpret_cast<NonLinearSolverEdf*>(estruct->obj);
+    return edf->data->x;
 }

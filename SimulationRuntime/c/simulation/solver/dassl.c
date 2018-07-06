@@ -177,14 +177,13 @@ void setAllNonLinearIterationVars(DATA *data)
 {
 	NONLINEAR_SYSTEM_DATA *nlsData = data->simulationInfo->nonlinearSystemData;
 	double *buffer;
-	int i,j;
+	int i;
 	unsigned int outIdx;
-	for(i=0,j=0; i <data->modelData->nNonLinearSystems; i++)
+	for(i=0; i <data->modelData->nNonLinearSystems; i++)
 	{
 		if (nlsData[i].adolcIndex>=0){
-		    buffer = adolc_nonlin_sol_get_values_buffer(j);
+		    buffer = adolc_nonlin_sol_get_values_buffer(nlsData[i].adolcIndex);
 		    nlsData[i].getIterationVars(data, buffer);
-		    j++;
 		}
 	}
 }
