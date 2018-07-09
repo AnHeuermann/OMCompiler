@@ -73,8 +73,6 @@ int dgemm_(char* transa, char* transb, int* m, int* n, int* k, double* alpha,
            int* ldc);
 }
 
-ext_diff_fct_v2 *get_ext_diff_fct_v2( int index );
-
 static void printvec(const char* name, int m, double* v) {
     int i,j;
 
