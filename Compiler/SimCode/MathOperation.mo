@@ -271,7 +271,7 @@ protected
   OperationData optData;
   list<Integer> tmpLst;
 
-  constant Boolean debug = true;
+  constant Boolean debug = false;
 algorithm
   // get function for funcName
   // create OperationData for single func
@@ -581,7 +581,7 @@ protected
   list<DAE.Statement> statements;
   list<LinSysPattern> lsPat;
   Integer tmptmpIndex;
-  constant Boolean debug = true;
+  constant Boolean debug = false;
 algorithm
   try
     operations := {};
@@ -1073,7 +1073,7 @@ algorithm
       Absyn.Path path;
       WorkingStateArgs workingArgs;
       Boolean isActive;
-      constant Boolean debug = true;
+      constant Boolean debug = false;
 
     // BCONST
     case (e1 as DAE.BCONST(false), (opds, ops, workingArgs)) equation
