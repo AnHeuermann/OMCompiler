@@ -848,7 +848,15 @@ algorithm
             op = replaceOperationResult(op, simVarOperand);
             outOperations = op::rest;
           else
-            op = OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+            op = match assignOperand
+              case OPERAND_VAR()
+              then OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
+              case OPERAND_CONST()
+              then OPERATION({assignOperand}, ASSIGN_PASSIVE(), simVarOperand);
+              else equation
+                Error.addInternalError("createOperationDataStmts failed with arg: " + ExpressionDump.printExpStr(rhs) + "\n", sourceInfo());
+              then fail();
+            end match;
             outOperations = op::outOperations;
           end if;
           // print(" ops: " + printOperationStr(op) + "\n");
