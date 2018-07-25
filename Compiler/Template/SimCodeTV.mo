@@ -998,6 +998,8 @@ package MathOperation
     end COND_ASSIGN;
     record COND_EQ_ASSIGN
     end COND_EQ_ASSIGN;
+    record EXT_DIFF
+    end EXT_DIFF;
 	  record EXT_DIFF_V
     end EXT_DIFF_V;
   end MathOperator;
@@ -1040,6 +1042,7 @@ package MathOperation
       String name;
       Integer numRealParameters;
       list<LinSysPattern> linSysPat;
+      list<tuple<SimCodeFunction.Function, Option<tuple<list<tuple<Integer,DAE.derivativeCond>>, SimCodeFunction.Function>>, Integer>> extFuncNames;
     end OPERATIONDATA;
   end OperationData;
 
@@ -2687,7 +2690,13 @@ package DAE
     Option<Exp> startTimeE;
     Option<Exp> finalTimeE;
   end OPTIMIZATION_ATTRS;
-end ClassAttributes;
+  end ClassAttributes;
+
+	uniontype derivativeCond "Different conditions on derivatives"
+	  record ZERO_DERIVATIVE end ZERO_DERIVATIVE;
+	  record NO_DERIVATIVE Exp binding; end NO_DERIVATIVE;
+	end derivativeCond;
+
 
 end DAE;
 

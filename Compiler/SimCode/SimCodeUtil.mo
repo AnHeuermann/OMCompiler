@@ -633,7 +633,8 @@ algorithm
                                                               crefToSimVarHT, 2*modelInfo.varInfo.numStateVars+modelInfo.varInfo.numAlgVars, 
                                                               modelInfo.varInfo.numIntAlgVars, modelInfo.varInfo.numBoolAlgVars,
                                                               tmpSimVars.paramVars, tmpSimVars.intParamVars, tmpSimVars.boolParamVars,
-                                                              filenamePrefix, funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars);
+                                                              filenamePrefix, funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars,
+                                                              functions);
       //MathOperation.dumpOperationData(modelOperationData);
       execStat("simCode: ADOLC createOperationData");
     else

@@ -51,6 +51,7 @@ import BackendDump;
 import ComponentReference;
 import DAEUtil;
 import Debug;
+import Differentiate;
 import Expression;
 import ExpressionDump;
 import TaskSystemDump;
@@ -109,6 +110,8 @@ public uniontype MathOperator
   end COND_ASSIGN;
   record COND_EQ_ASSIGN
   end COND_EQ_ASSIGN;
+  record EXT_DIFF
+  end EXT_DIFF;
   record EXT_DIFF_V
   end EXT_DIFF_V;
 end MathOperator;
@@ -151,6 +154,7 @@ public uniontype OperationData
     String name;
     Integer numRealParameters;
     list<LinSysPattern> linSysPat;
+    list<tuple<SimCodeFunction.Function, Option<tuple<list<tuple<Integer,DAE.derivativeCond>>, SimCodeFunction.Function>>, Integer>> extFuncNames;
   end OPERATIONDATA;
 end OperationData;
 
@@ -158,6 +162,7 @@ protected uniontype WorkingStateArgs
   record WORKINGSTATEARGS
     SimCode.HashTableCrefToSimVar crefToSimVarHT;
     list<Absyn.Path> funcNames;
+    list<tuple<Absyn.Path, Integer>> extFuncNames;
     list<SimCode.NonlinearSystem> nlsSystems;
     Integer tmpIndex;
     Integer numRealVariables;
@@ -182,6 +187,7 @@ public function createOperationData
   input DAE.FunctionTree functionTree;
   input list<SimCodeVar.SimVar> independents;
   input list<SimCodeVar.SimVar> dependents;
+  input list<SimCodeFunction.Function> simFunctions;
   output list<OperationData> outOperationData;
 protected
   WorkingStateArgs workingArgs;
@@ -191,7 +197,7 @@ protected
   constant Boolean debug = false;
 algorithm
   try
-    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, numRealVariables+numIntVariables+numBoolVariables, numRealVariables, numIntVariables, listLength(realParameters), listLength(intParameters));
+    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, {}, numRealVariables+numIntVariables+numBoolVariables, numRealVariables, numIntVariables, listLength(realParameters), listLength(intParameters));
 
     if debug then
       print("# Equations: " + intString(listLength(inEquations)) + ".\n");
@@ -220,7 +226,7 @@ algorithm
     end if;
 
     // create needed functions
-    opDataFuncs := createOperationDataFuncs(workingArgs.funcNames, functionTree);
+    (opDataFuncs, workingArgs) := createOperationDataFuncs(workingArgs.funcNames, functionTree, workingArgs);
     
     opDataFuncs := listAppend(opDataNLS, opDataFuncs);
 
@@ -228,6 +234,7 @@ algorithm
 
     tmpOpData.name := modelName;
     tmpOpData.numRealParameters := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters);
+    tmpOpData.extFuncNames := createExternalFunctionData( workingArgs.extFuncNames, functionTree, simFunctions); 
 
     if debug then
       print("Created operations for model: " + modelName +
@@ -244,6 +251,40 @@ algorithm
   end try;
 end createOperationData;
 
+
+protected function createExternalFunctionData
+  input list<tuple<Absyn.Path, Integer>> inExtFuncNames;
+  input DAE.FunctionTree functionTree;
+  input list<SimCodeFunction.Function> functions;
+  output list<tuple<SimCodeFunction.Function, Option<tuple<list<tuple<Integer,DAE.derivativeCond>>, SimCodeFunction.Function>>, Integer>> resultTuple = {};
+protected
+  DAE.Function func, func2;
+  Option<tuple<list<tuple<Integer,DAE.derivativeCond>>, SimCodeFunction.Function>> mapper;
+  Absyn.Path path, derivativeFunction;
+  Integer index;
+  SimCodeFunction.Function simFunc, simFunc2;
+  list<tuple<Integer,DAE.derivativeCond>> conditionRefs;
+algorithm
+  for x in inExtFuncNames loop
+    (path, index) := x;
+    //func := DAEUtil.getNamedFunction(path, functionTree);
+    simFunc := List.getMemberOnTrue(path, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
+    
+    try 
+      (DAE.FUNCTION_DER_MAPPER(derivativeFunction=derivativeFunction, conditionRefs = conditionRefs), _)  := Differentiate.getFunctionMapper(path, functionTree);
+      print("got function mapper: " + Absyn.pathString(derivativeFunction) + "\n");
+      //func2 :=  DAEUtil.getNamedFunction(derivativeFunction, functionTree);
+      simFunc2 := List.getMemberOnTrue(derivativeFunction, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
+      print("Found derivative function\n");
+      
+      mapper := SOME((conditionRefs, simFunc2));
+    else
+      mapper := NONE();
+    end try;
+    resultTuple := (simFunc, mapper, index)::resultTuple; 
+  end for;
+end createExternalFunctionData;
+
 protected function setInDepAndDepVars
   input list<SimCodeVar.SimVar> independents;
   input list<SimCodeVar.SimVar> dependents;
@@ -258,6 +299,7 @@ protected function createOperationDataFuncs
   input list<Absyn.Path> funcNames;
   input DAE.FunctionTree functionTree;
   output list<OperationData> outOperationData = {};
+  input output WorkingStateArgs inWorkingArgs;
 protected
   WorkingStateArgs workingArgs;
   list<Absyn.Path> funcList = funcNames;
@@ -275,7 +317,7 @@ protected
 algorithm
   // get function for funcName
   // create OperationData for single func
-  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, {}, 0, 0, 0, 0, 0);
+  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, inWorkingArgs.extFuncNames, {}, 0, 0, 0, 0, 0);
   while not listEmpty(funcList) loop
     for funcName in funcList loop
 
@@ -311,7 +353,7 @@ algorithm
       localHT := List.fold(protectedSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
       numVars := listLength(inputSimVars) + listLength(outputSimVars) + listLength(protectedSimVars);
 
-      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, {}, numVars, numVars, 0, 0, 0);
+      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, workingArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0);
 
       (optData, workingArgs) := createOperationsForFunction(bodyStmts, workingArgs, allFuncList, functionTree);
 
@@ -329,6 +371,7 @@ algorithm
     allFuncList := listAppend(workingArgs.funcNames, allFuncList);
     funcList := workingArgs.funcNames;
   end while;
+  inWorkingArgs.extFuncNames := workingArgs.extFuncNames;
 end createOperationDataFuncs;
 
 protected function createOperationDataNLS
@@ -429,7 +472,7 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
     numVars := listLength(iterationSimVars)+listLength(resSimVars)+listLength(innerSimVars);    
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(inputSimVars), 0);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(inputSimVars), 0);
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
@@ -480,7 +523,7 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
     
     numVars := listLength(inputSimVars)+listLength(resSimVars)+listLength(innerSimVars);
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(iterationSimVars), 0);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(iterationSimVars), 0);
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
@@ -569,7 +612,7 @@ protected
 algorithm
   (operations, workingArgs) := createOperationDataStmts(funcBody, workingArgs, functionTree);
   operations := listReverse(operations);
-  outOperationData := OPERATIONDATA(operations, workingArgs.tmpIndex, {}, {}, "", 0, {});
+  outOperationData := OPERATIONDATA(operations, workingArgs.tmpIndex, {}, {}, "", 0, {}, {});
 end createOperationsForFunction;
 
 protected function createOperationEqns
@@ -811,7 +854,7 @@ algorithm
     end for;
     operations := listReverse(operations);
     lsPat := listReverse(lsPat);
-    outOperationData := OPERATIONDATA(operations, maxTmpIndex, {}, {}, "", 0, lsPat);
+    outOperationData := OPERATIONDATA(operations, maxTmpIndex, {}, {}, "", 0, lsPat, {});
   else
     Error.addInternalError("createModelInfo failed", sourceInfo());
     fail();
@@ -1080,7 +1123,7 @@ algorithm
       list<DAE.Subscript> subs;
       DAE.Type ty;
       DAE.Operator op, tmpop;
-      Integer tmpIndex, numArgs;
+      Integer tmpIndex, numArgs, pathIndex;
       Absyn.Ident ident;
       Absyn.Path path;
       Boolean isActive;
@@ -1627,6 +1670,39 @@ algorithm
       ops = operation::ops;
     then (inExp, (result::rest, ops, workingArgs));
 
+    // external Modelica functions
+    // CALL
+    case (DAE.CALL(path=path, expLst=expList, attr=DAE.CALL_ATTR(ty=ty,builtin=false))) guard ( DAEUtil.isExtFunction( DAEUtil.getNamedFunction(path, functionTree) )) 
+      equation
+
+      // check if function exits in workingStatargs funcNames, else append
+      if not List.isMemberOnTrue(path, workingArgs.extFuncNames, pathEqualInTuple) then
+        pathIndex = listLength(workingArgs.extFuncNames);
+        workingArgs.extFuncNames = (path, pathIndex)::workingArgs.extFuncNames;
+      else
+        (_, pathIndex) = List.getMemberOnTrue(path, workingArgs.extFuncNames, pathEqualInTuple);
+      end if;
+    
+      // process all call armugments by with expList
+      print("collectOperation external FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
+      (firstArg, opds, ops, workingArgs, numArgs) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
+      print("collectOperation external FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
+
+      (results, tmpIndex) = createOperandVarLst(workingArgs.tmpIndex, ty);
+      workingArgs.tmpIndex = tmpIndex;
+      result = List.first(results);
+      opds = listAppend(results, opds);
+
+      tmpIndex = numResults(ty);
+      if debug then
+        print("numRes = " + intString(tmpIndex) + ".\n");
+        print("Type   = " + Types.printTypeStr(ty) + ".\n");
+      end if;
+      operation = OPERATION({OPERAND_INDEX(pathIndex), OPERAND_INDEX(numArgs), OPERAND_INDEX(tmpIndex), firstArg}, EXT_DIFF(), result);
+      print("collectOperation external Modelica operation : " +  printOperationStr(operation) +"\n");
+      ops = operation::ops;
+    then (inExp, (opds, ops, workingArgs));
+
     // Modelica functions
     // CALL
     case (DAE.CALL(path=path, expLst=expList, attr=DAE.CALL_ATTR(ty=ty,builtin=false))) equation
@@ -1687,6 +1763,14 @@ algorithm
   returnTpl := (opds, ops, workingArgs, functionTree);
   //print("ready collectOperation\n");
 end collectOperation;
+
+protected function pathEqualInTuple
+  input Absyn.Path inOne;
+  input tuple<Absyn.Path, Integer> inTwo;
+  output Boolean result;
+algorithm
+  result := Absyn.pathEqual(inOne, Util.tuple21(inTwo));
+end pathEqualInTuple;
 
 protected function numResults
   "Todo: Is there an existing function in Frontend oder Backend?
@@ -2245,6 +2329,9 @@ algorithm
 
     case COND_EQ_ASSIGN()
     then "cond_eq_assign";
+
+    case EXT_DIFF()
+    then "ext_diff";
 
     case EXT_DIFF_V()
     then "ext_diff_v";

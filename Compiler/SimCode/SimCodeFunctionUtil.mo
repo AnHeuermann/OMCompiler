@@ -2629,6 +2629,22 @@ algorithm
   outdef := stringDelimitList(List.threadMap(List.fill("i_", nrdims), idxstrlst, stringAppend), ",");
 end generateSubPalceholders;
 
+public function compareSimCodeFunctionPath
+  input Absyn.Path inPath;
+  input SimCodeFunction.Function func;
+  output Boolean result;
+protected
+ Absyn.Path funcName;
+algorithm
+  () := match (func)
+    case SimCodeFunction.FUNCTION(name=funcName) then ();
+    case SimCodeFunction.PARALLEL_FUNCTION(name=funcName) then ();
+    case SimCodeFunction.KERNEL_FUNCTION(name=funcName) then ();
+    case SimCodeFunction.EXTERNAL_FUNCTION(name=funcName) then (); 
+    case SimCodeFunction.RECORD_CONSTRUCTOR(name=funcName) then (); 
+  end match;
+  result := Absyn.pathEqual(inPath, funcName); 
+end compareSimCodeFunctionPath;
 
 
 annotation(__OpenModelica_Interface="backendInterface");
