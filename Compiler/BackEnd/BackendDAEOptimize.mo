@@ -1533,6 +1533,7 @@ protected function addUnusedFunction
 protected
   Option<DAE.Function> f;
   list<DAE.Element> body;
+  Absyn.Path derPathName;
 algorithm
   try // Check if the function has already been added.
     _ := DAE.AvlTreePathFunction.get(inUsedFunctions, inPath);
@@ -1544,6 +1545,14 @@ algorithm
       (_, outUsedFunctions) := DAEUtil.traverseDAEElementList(body,
         function checkUnusedFunctions(inFunctions = inFunctions), outUsedFunctions);
     end if;
+
+    // get also derivative annotation function
+    try
+      (DAE.FUNCTION_DER_MAPPER(derivativeFunction = derPathName), _) := Differentiate.getFunctionMapper(inPath, inFunctions);
+      outUsedFunctions := addUnusedFunction(derPathName, inFunctions, outUsedFunctions);
+    else
+    end try;
+
   end try;
 end addUnusedFunction;
 
