@@ -280,35 +280,26 @@ protected
 algorithm
   for x in inExtFuncNames loop
     (path, index) := x;
+    //print("Handle external functions: " + Absyn.pathString(path) + "\n");
     //func := DAEUtil.getNamedFunction(path, functionTree);
     (simFunc as SimCodeFunction.EXTERNAL_FUNCTION(extArgs=extArgs) ):= List.getMemberOnTrue(path, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
     
     try 
       (DAE.FUNCTION_DER_MAPPER(derivativeFunction=derivativeFunction, conditionRefs = conditionRefs), _)  := Differentiate.getFunctionMapper(path, functionTree);
-      print("got function mapper: " + Absyn.pathString(derivativeFunction) + "\n");
       //func2 :=  DAEUtil.getNamedFunction(derivativeFunction, functionTree);
       (simFunc2 as SimCodeFunction.EXTERNAL_FUNCTION(extArgs=extDerArgs)) := List.getMemberOnTrue(derivativeFunction, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
-      print("Found derivative function\n");
       noDerArgsNum := list( Util.tuple21(x)-1 for x in conditionRefs);
-      print(" noDerArgs: " +  stringDelimitList(List.map(noDerArgsNum, intString), " ") + "\n");
-      print("Got no Der Args numbers\n");
       derArgs := list( ARGS_INDICES(i, x) threaded for x in extArgs, i in List.intRange2(0,listLength(extArgs)-1));
-      print(" listLength(derArgs): " +  intString(listLength(derArgs)) + "\n");
-      print("threaded der Args\n");
       derArgs := List.deletePositionsSorted(derArgs, noDerArgsNum);
-      print("filter no der in derArgs\n");
       derArgs := list( x for x guard Expression.isRealType(SimCodeFunctionUtil.getSimExtArgType(x.argument)) in derArgs);
-      print("filter reals in derArgs\n");
       (_, derSimFuncArgs) := List.split(extDerArgs, listLength(extArgs));
-      print("filter split inputs \n");
       derArgs := list( ARGS_INDICES(y.index, x) threaded for x in derSimFuncArgs, y in derArgs);
-      print("create der Arsg\n");
       mapper := (derArgs, simFunc2);
     else
       Error.addMessage(Error.INTERNAL_ERROR, {"function createExternalFunctionData failed."});
       fail();
     end try;
-    resultTuple := (simFunc, mapper, index)::resultTuple; 
+    resultTuple := (simFunc, mapper, index)::resultTuple;
   end for;
 end createExternalFunctionData;
 
@@ -682,12 +673,12 @@ algorithm
 
         // SIMPLE_ASSIGN
         case SimCode.SES_SIMPLE_ASSIGN(index=index, exp=exp, cref=cref) equation
-          print("createOperationEqns operation : " + ComponentReference.printComponentRefStr(cref) + " = " +  ExpressionDump.printExpStr(exp) +"\n");
+          //print("createOperationEqns operation : " + ComponentReference.printComponentRefStr(cref) + " = " +  ExpressionDump.printExpStr(exp) +"\n");
           (simVar, _) = getSimVarWithIndexShift(cref, workingArgs);
           simVarOperand = OPERAND_VAR(simVar);
           //print("createOperationEqns assign : ");
           ({assignOperand}, operations, workingArgs) = collectOperationsForExp(exp, operations, workingArgs, functionTree);
-          print("Done with collectOperationsForExp\n");
+          //print("Done with collectOperationsForExp\n");
           if isTmpOperand(assignOperand) then
             op::rest = operations;
             op = replaceOperationResult(op, simVarOperand);
@@ -704,7 +695,7 @@ algorithm
             end match;
             operations = op::operations;
           end if;
-          print("createOperationEqns operation : " +  printOperationStr(op) +"\n");
+          //print("createOperationEqns operation : " +  printOperationStr(op) +"\n");
         then ();
 
         case SimCode.SES_RESIDUAL() equation
@@ -1711,9 +1702,9 @@ algorithm
       end if;
     
       // process all call armugments by with expList
-      print("collectOperation external FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
+      //print("collectOperation external FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
       (firstArg, opds, ops, workingArgs, numArgs) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
-      print("collectOperation external FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
+      //print("collectOperation external FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
 
       (results, tmpIndex) = createOperandVarLst(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
@@ -1726,7 +1717,7 @@ algorithm
         print("Type   = " + Types.printTypeStr(ty) + ".\n");
       end if;
       operation = OPERATION({OPERAND_INDEX(pathIndex), OPERAND_INDEX(numArgs), OPERAND_INDEX(tmpIndex), firstArg}, EXT_DIFF(), result);
-      print("collectOperation external Modelica operation : " +  printOperationStr(operation) +"\n");
+      //print("collectOperation external Modelica operation : " +  printOperationStr(operation) +"\n");
       ops = operation::ops;
     then (inExp, (opds, ops, workingArgs));
 
@@ -1738,12 +1729,12 @@ algorithm
       if not List.isMemberOnTrue(path, workingArgs.funcNames, Absyn.pathEqual) then
         workingArgs.funcNames = path::workingArgs.funcNames;
       end if;
-      print("collectOperationsForFuncArgs pre opds : " +  printOperandListStr(opds) +"\n");
+      //print("collectOperationsForFuncArgs pre opds : " +  printOperandListStr(opds) +"\n");
 
       // process all call armugments by with expList
-      print("collectOperation FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
+      //print("collectOperation FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
       (firstArg, opds, ops, workingArgs, numArgs) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
-      print("collectOperation FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
+      //print("collectOperation FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
 
       (results, tmpIndex) = createOperandVarLst(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
@@ -1758,7 +1749,7 @@ algorithm
         print("Type   = " + Types.printTypeStr(ty) + ".\n");
       end if;
       operation = OPERATION({firstArg, OPERAND_INDEX(numArgs), OPERAND_INDEX(tmpIndex)}, MODELICA_CALL(ident), result);
-      print("collectOperation operation : " +  printOperationStr(operation) +"\n");
+      //print("collectOperation operation : " +  printOperationStr(operation) +"\n");
       ops = operation::ops;
     then (inExp, (opds, ops, workingArgs));
 
