@@ -150,10 +150,10 @@ using std::forward_list;
 class ModelicaExtFunc : public EDFobject {
 public:
     ModelicaExtFunc() : EDFobject(){  }
-
+    virtual ~ModelicaExtFunc() {}
     virtual int function(int n, double *x, int m, double *y) { return this->zos_forward(n,x,m,y); }
-    virtual int zos_forward(int n, double *x, int m, double *y);
-    virtual int fos_forward(int n, double *dp_x, double *dp_X, int m, double *dp_y, double *dp_Y);
+    virtual int zos_forward(int n, double *x, int m, double *y) = 0;
+    virtual int fos_forward(int n, double *dp_x, double *dp_X, int m, double *dp_y, double *dp_Y)  = 0;
     virtual int fov_forward(int n, double *dp_x, int p, double **dpp_X, int m, double *dp_y, double **dpp_Y);
     virtual int fos_reverse(int m, double *dp_U, int n, double *dp_Z, double *dp_x, double *dp_y) {return 0;}
     virtual int fov_reverse(int m, int p, double **dpp_U, int n, double **dpp_Z, double *dp_x, double *dp_y) {return 0;}
@@ -212,6 +212,12 @@ case (f as SimCodeFunction.EXTERNAL_FUNCTION(name=name,extArgs=extArgs, extRetur
       ) then
       
 let inputs = (extArgs |> arg hasindex i0 =>  match arg 
+                    case SimCodeFunction.SIMEXTARG(type_=T_COMPLEX(complexClassType=EXTERNAL_OBJ(__))) then
+                    if isInput then
+                        let typeStr = extType(type_, isInput, isArray)
+                        '<%extVarName(cref)%> = reinterpret_cast< <%typeStr%> > (static_cast<size_t> (dp_x[<%i0%>]));'
+                    else
+                        ''
                     case SimCodeFunction.SIMEXTARG(__) then
                     if isInput then 
                         let typeStr = extType(type_, isInput, isArray)
@@ -248,6 +254,10 @@ let derInputs = (derInputExtArgs |> derArg  =>
                   match derArg
                   case arg as MathOperation.ARGS_INDICES(__) then
                     match arg.argument
+                    case SimCodeFunction.SIMEXTARG(type_=T_COMPLEX(complexClassType=EXTERNAL_OBJ(__))) then
+                    if isInput then
+                        let typeStr = extType(type_, isInput, isArray)
+                        '<%extVarName(cref)%> = reinterpret_cast< <%typeStr%> > (static_cast<size_t> (dp_X[<%arg.index%>]));'
                     case sExt as SimCodeFunction.SIMEXTARG(__) then
                     if isInput then
                       let typeStr = extType(sExt.type_, sExt.isInput, sExt.isArray)
@@ -280,6 +290,7 @@ let derReturnDecl = match derExtReturn
 class MEF_<%nameStr%>: public ModelicaExtFunc {
 public :
     MEF_<%nameStr%>() : ModelicaExtFunc() {}
+    virtual ~MEF_<%nameStr%>() {}
     virtual int zos_forward(int n, double *dp_x, int m, double *dp_y);
     virtual int fos_forward(int n, double *dp_x, double *dp_X, int m, double *dp_y, double *dp_Y);
 };
