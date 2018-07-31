@@ -1033,6 +1033,13 @@ package MathOperation
     end LINSYSPATTERN;
   end LinSysPattern;
 
+  uniontype ArgsIndices
+    record ARGS_INDICES
+      Integer index;
+      SimCodeFunction.SimExtArg argument;
+    end ARGS_INDICES;
+  end ArgsIndices;
+
   uniontype OperationData
     record OPERATIONDATA
       list<Operation> operations;
@@ -1042,8 +1049,7 @@ package MathOperation
       String name;
       Integer numRealParameters;
       list<LinSysPattern> linSysPat;
-      list<tuple<SimCodeFunction.Function, Option<tuple<list<tuple<Integer,DAE.derivativeCond>>, SimCodeFunction.Function>>, Integer>> extFuncNames;
-    end OPERATIONDATA;
+      list<tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer>> extFuncNames;    end OPERATIONDATA;
   end OperationData;
 
   function printOperatorStr
@@ -3814,12 +3820,14 @@ package Flags
   constant ConfigFlag EQUATIONS_PER_FILE;
   constant ConfigFlag GENERATE_SYMBOLIC_JACOBIAN;
   constant ConfigFlag HOMOTOPY_APPROACH;
-    constant ConfigFlag GENERATE_LABELED_SIMCODE;
+  constant ConfigFlag GENERATE_LABELED_SIMCODE;
   constant ConfigFlag REDUCE_TERMS;
   constant ConfigFlag LABELED_REDUCTION;
   constant ConfigFlag LOAD_MSL_MODEL;
   constant ConfigFlag Load_PACKAGE_FILE;
    constant ConfigFlag SINGLE_INSTANCE_AGLSOLVER;
+  constant ConfigFlag GEN_ADOLC_TRACE;
+
   function set
     input DebugFlag inFlag;
     input Boolean inValue;

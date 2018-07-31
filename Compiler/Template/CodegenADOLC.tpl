@@ -117,18 +117,20 @@ template createOnePattern(LinSysPattern linSysPat)
   end match
 end createOnePattern;
 
-template createExtFunctionsFile(String fileNamePrefix, list<tuple<SimCodeFunction.Function, Option<tuple<list<tuple<Integer,derivativeCond>>, SimCodeFunction.Function>>, Integer>> extFuncNames)
+template createExtFunctionsFile(String fileNamePrefix, list<tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer>> extFuncNames)
 ::=
 match extFuncNames
-case {} then <<>>
+case {} then
+textFile("extern \"C\" void init_modelica_external_functions() {}", '<%fileNamePrefix%>_extFuncs.cpp')
 else
 textFile(createExternalFunctionCalls(fileNamePrefix, extFuncNames), '<%fileNamePrefix%>_extFuncs.cpp')
 end createExtFunctionsFile;
 
-template createExternalFunctionCalls(String fileNamePrefix, list<tuple<SimCodeFunction.Function, Option<tuple<list<tuple<Integer,derivativeCond>>, SimCodeFunction.Function>>, Integer>> extFuncNames)
+template createExternalFunctionCalls(String fileNamePrefix, list<tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer>> extFuncNames)
 ::=
 
 let funcClassDecl = ( extFuncNames |> funcNameTuple => createExtFuncClass(funcNameTuple); separator="\n\n")
+let extFuncInit = (extFuncNames |> funcNameTuple => createExtFuncInit(funcNameTuple); separator="\n")
 <<
 /* External function calls for adolc */
 #include "util/modelica.h"
@@ -166,26 +168,45 @@ int ModelicaExtFunc::fov_forward(int n, double *dp_x, int p, double **dpp_X, int
          int iret = fos_forward(n,dp_x,dpp_X[i],m,dp_y,dp_Y);
          for (int j=0; j<m; j++)
              dpp_Y[j][i] = dp_Y[j];
-         ret = MINDEC(ret,iret);
+         MINDEC(ret,iret);
     }
     return ret;
 }
 
-static forward_list<ModelicaExtFunc> extfunclist;
+static forward_list<ModelicaExtFunc*> extfunclist;
 
 <%funcClassDecl%>
 
+extern "C" void init_modelica_external_functions() {
+    ModelicaExtFunc* fp;
+    <%extFuncInit%>
+}
 >>
 end createExternalFunctionCalls;
 
-
-template createExtFuncClass(tuple<SimCodeFunction.Function, Option<tuple<list<tuple<Integer,derivativeCond>>, SimCodeFunction.Function>>, Integer> funcTuple)
+template createExtFuncInit(tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer> funcTuple)
 ::=
 match funcTuple
-case (f as SimCodeFunction.EXTERNAL_FUNCTION(name=name,extArgs=extArgs, extReturn=extReturn), 
-      SOME( (lstDerArgs, 
-             derf as  SimCodeFunction.EXTERNAL_FUNCTION(name=derName,extArgs=derExtArgs, extReturn=derExtReturn))
-      ), _
+case (f as SimCodeFunction.EXTERNAL_FUNCTION(name=name,extArgs=extArgs, extReturn=extReturn),
+      (derInputExtArgs,
+        derf as  SimCodeFunction.EXTERNAL_FUNCTION(name=derName, extArgs= derExtArgs, extReturn=derExtReturn))
+      , index
+      ) then
+let nameStr = underscorePath(name)
+<<
+fp = new MEF_<%nameStr%>;
+extfunclist.push_front(fp);
+assert(fp->get_index() == <%index%>);
+>>
+end createExtFuncInit;
+
+template createExtFuncClass(tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer> funcTuple)
+::=
+match funcTuple
+case (f as SimCodeFunction.EXTERNAL_FUNCTION(name=name,extArgs=extArgs, extReturn=extReturn),
+      (derInputExtArgs,
+        derf as  SimCodeFunction.EXTERNAL_FUNCTION(name=derName, extArgs= derExtArgs, extReturn=derExtReturn))
+      , _
       ) then
       
 let inputs = (extArgs |> arg hasindex i0 =>  match arg 
@@ -221,14 +242,15 @@ let returnDecl = match extReturn
 
 let nameStr = underscorePath(name)
 
-let derInputs = (derExtArgs |> arg hasindex i0 =>  match arg 
-                    case SimCodeFunction.SIMEXTARG(__) then
-                    if isInput then 
-                        let typeStr = extType(type_, isInput, isArray)
-                        '<%extVarName(cref)%> = (<%typeStr%>) dp_X[<%i0%>];'
-                    else 
-                        ''
-                    ; separator="\n")
+let derInputs = (derInputExtArgs |> derArg  =>
+                  match derArg
+                  case arg as MathOperation.ARGS_INDICES(__) then
+                    match arg.argument
+                    case sExt as SimCodeFunction.SIMEXTARG(__) then
+                    if isInput then
+                      let typeStr = extType(sExt.type_, sExt.isInput, sExt.isArray)
+                      '<%extVarName(sExt.cref)%> = (<%typeStr%>) dp_X[<%arg.index%>];'
+                ; separator="\n")
 
 let derOutput = match derExtReturn
                case SimCodeFunction.SIMEXTARG(__) then
@@ -253,7 +275,7 @@ let derReturnDecl = match derExtReturn
                         '<%expTypeFlag(type_, 2)%> _<%crefStr(cref)%>;'
 
 <<
-class MEF_<%nameStr%>: ModelicaExtFunc() {
+class MEF_<%nameStr%>: public ModelicaExtFunc {
 public :
     MEF_<%nameStr%>() : ModelicaExtFunc() {}
     virtual int zos_forward(int n, double *dp_x, int m, double *dp_y);
@@ -286,41 +308,46 @@ return 0;
 }
 
 int MEF_<%nameStr%>::fos_forward(int n, double *dp_x, double *dp_X, int m, double *dp_y, double *dp_Y) {
-
+{ /* extra block for local variables */
 /* varDecls */
 <%varDecls%>
-/* derVarDecls */
-<%derVarDecls%>
 /* varInit */
 <%varInit%>
-/* dervarInit */
-<%derVarInit%>
 /* auxFuncs */
 <%auxFuncs%>
-/* derAuxFuncs */
-<%derAuxFuncs%>
 /* return decl */
 <%returnDecl%>
+
+/* inputs => preExp */
+<%inputs%>
+/* external function call */
+<%extFuncCall%>
+/* get outputs */
+<%output%>
+<%extraOuts%>
+} /* extra block end */
+
+{ /* extra block for local variables */
+/* derVarDecls */
+<%derVarDecls%>
+/* dervarInit */
+<%derVarInit%>
+/* derAuxFuncs */
+<%derAuxFuncs%>
 /* der return decl */
 <%derReturnDecl%>
-
 /* inputs => preExp */
 <%inputs%>
 /* derInputs */
 <%derInputs%>
 
-/* external function call */
-<%extFuncCall%>
 /* der external function call */
 <%derExtFuncCall%>
 
-/* get outputs */
-<%output%>
-<%extraOuts%>
 /* get derOutputs */
 <%derOutput%>
 <%derExtraOuts%>
-
+} /* extra block end */
 return 0;
 }
 >>

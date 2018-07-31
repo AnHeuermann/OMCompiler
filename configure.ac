@@ -660,6 +660,7 @@ if test x$with_adolc != xno ; then
       CPPFLAGS="$CPPFLAGS $ADOLC_CFLAGS"
    fi
 fi
+AC_SUBST(ADOLC_CFLAGS)
 
 AC_MSG_CHECKING([for OpenCL])
 AC_CHECK_HEADER([CL/cl.h],[OPENCL="Yes"],[

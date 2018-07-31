@@ -49,17 +49,20 @@ import SimCode;
 protected
 import BackendDump;
 import ComponentReference;
+import DAEDump;
 import DAEUtil;
 import Debug;
 import Differentiate;
 import Expression;
 import ExpressionDump;
-import TaskSystemDump;
+import List;
+import SimCodeFunction;
 import SimCodeUtil;
 import System;
+import TaskSystemDump;
 import Util;
-import List;
-import DAEDump;
+
+
 
 /* TODO:
     - write new entry point for a model
@@ -145,6 +148,13 @@ public uniontype LinSysPattern
   end LINSYSPATTERN;
 end LinSysPattern;
 
+public uniontype ArgsIndices
+  record ARGS_INDICES
+    Integer index;
+    SimCodeFunction.SimExtArg argument;
+  end ARGS_INDICES;
+end ArgsIndices;
+
 public uniontype OperationData
   record OPERATIONDATA
     list<Operation> operations;
@@ -154,7 +164,7 @@ public uniontype OperationData
     String name;
     Integer numRealParameters;
     list<LinSysPattern> linSysPat;
-    list<tuple<SimCodeFunction.Function, Option<tuple<list<tuple<Integer,DAE.derivativeCond>>, SimCodeFunction.Function>>, Integer>> extFuncNames;
+    list<tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer>> extFuncNames;
   end OPERATIONDATA;
 end OperationData;
 
@@ -256,30 +266,47 @@ protected function createExternalFunctionData
   input list<tuple<Absyn.Path, Integer>> inExtFuncNames;
   input DAE.FunctionTree functionTree;
   input list<SimCodeFunction.Function> functions;
-  output list<tuple<SimCodeFunction.Function, Option<tuple<list<tuple<Integer,DAE.derivativeCond>>, SimCodeFunction.Function>>, Integer>> resultTuple = {};
+  output list<tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer>> resultTuple = {};
 protected
   DAE.Function func, func2;
-  Option<tuple<list<tuple<Integer,DAE.derivativeCond>>, SimCodeFunction.Function>> mapper;
+  tuple<list<ArgsIndices>, SimCodeFunction.Function> mapper;
   Absyn.Path path, derivativeFunction;
   Integer index;
   SimCodeFunction.Function simFunc, simFunc2;
   list<tuple<Integer,DAE.derivativeCond>> conditionRefs;
+  list<Integer> noDerArgsNum;
+  list<SimCodeFunction.SimExtArg> derSimFuncArgs, extArgs, extDerArgs;
+  list<ArgsIndices> derArgs;
 algorithm
   for x in inExtFuncNames loop
     (path, index) := x;
     //func := DAEUtil.getNamedFunction(path, functionTree);
-    simFunc := List.getMemberOnTrue(path, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
+    (simFunc as SimCodeFunction.EXTERNAL_FUNCTION(extArgs=extArgs) ):= List.getMemberOnTrue(path, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
     
     try 
       (DAE.FUNCTION_DER_MAPPER(derivativeFunction=derivativeFunction, conditionRefs = conditionRefs), _)  := Differentiate.getFunctionMapper(path, functionTree);
       print("got function mapper: " + Absyn.pathString(derivativeFunction) + "\n");
       //func2 :=  DAEUtil.getNamedFunction(derivativeFunction, functionTree);
-      simFunc2 := List.getMemberOnTrue(derivativeFunction, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
+      (simFunc2 as SimCodeFunction.EXTERNAL_FUNCTION(extArgs=extDerArgs)) := List.getMemberOnTrue(derivativeFunction, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
       print("Found derivative function\n");
-      
-      mapper := SOME((conditionRefs, simFunc2));
+      noDerArgsNum := list( Util.tuple21(x)-1 for x in conditionRefs);
+      print(" noDerArgs: " +  stringDelimitList(List.map(noDerArgsNum, intString), " ") + "\n");
+      print("Got no Der Args numbers\n");
+      derArgs := list( ARGS_INDICES(i, x) threaded for x in extArgs, i in List.intRange2(0,listLength(extArgs)-1));
+      print(" listLength(derArgs): " +  intString(listLength(derArgs)) + "\n");
+      print("threaded der Args\n");
+      derArgs := List.deletePositionsSorted(derArgs, noDerArgsNum);
+      print("filter no der in derArgs\n");
+      derArgs := list( x for x guard Expression.isRealType(SimCodeFunctionUtil.getSimExtArgType(x.argument)) in derArgs);
+      print("filter reals in derArgs\n");
+      (_, derSimFuncArgs) := List.split(extDerArgs, listLength(extArgs));
+      print("filter split inputs \n");
+      derArgs := list( ARGS_INDICES(y.index, x) threaded for x in derSimFuncArgs, y in derArgs);
+      print("create der Arsg\n");
+      mapper := (derArgs, simFunc2);
     else
-      mapper := NONE();
+      Error.addMessage(Error.INTERNAL_ERROR, {"function createExternalFunctionData failed."});
+      fail();
     end try;
     resultTuple := (simFunc, mapper, index)::resultTuple; 
   end for;

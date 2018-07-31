@@ -44,6 +44,8 @@ unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny1, int ny2,short* 
 
 double *adolc_nonlin_sol_get_values_buffer(int index);
 
+void init_modelica_external_functions();
+
 #ifdef __cplusplus
 }
 #endif

@@ -5930,7 +5930,7 @@ case SIMCODE(modelInfo=MODELINFO(varInfo=varInfo as VARINFO(__)), delayedExps=DE
 
   # Simulations use -O3 by default
   CC=<%if boolOr(Flags.isSet(Flags.PARMODAUTO),acceptParModelicaGrammar()) then 'g++' else '<%makefileParams.ccompiler%>'%>
-  CXX=<%makefileParams.cxxcompiler%>
+  CXX=<%makefileParams.cxxcompiler%> <%if Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then '-std=c++11'%>
   LINK=<%makefileParams.linker%>
   EXEEXT=<%makefileParams.exeext%>
   DLLEXT=<%makefileParams.dllext%>
@@ -5950,17 +5950,20 @@ case SIMCODE(modelInfo=MODELINFO(varInfo=varInfo as VARINFO(__)), delayedExps=DE
   <%fileNamePrefix%>_01exo.c <%fileNamePrefix%>_02nls.c <%fileNamePrefix%>_03lsy.c <%fileNamePrefix%>_04set.c <%fileNamePrefix%>_05evt.c <%fileNamePrefix%>_06inz.c <%fileNamePrefix%>_07dly.c \
   <%fileNamePrefix%>_08bnd.c <%fileNamePrefix%>_09alg.c <%fileNamePrefix%>_10asr.c <%fileNamePrefix%>_11mix.c <%fileNamePrefix%>_12jac.c <%fileNamePrefix%>_13opt.c <%fileNamePrefix%>_14lnz.c \
   <%fileNamePrefix%>_15syn.c <%fileNamePrefix%>_16dae.c <%fileNamePrefix%>_17inl.c <%extraFiles |> extraFile => ' \<%\n%>  <%extraFile%>'%>
+  <% if Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then 'CXXFILES=<%fileNamePrefix%>_extFuncs.cpp'%>
 
   OFILES=$(CFILES:.c=.o)
+  <% if Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then 'OFILES+=$(CXXFILES:.cpp=.o)'%>
+  
   GENERATEDFILES=$(MAINFILE) <%fileNamePrefix%>.makefile <%fileNamePrefix%>_literals.h <%fileNamePrefix%>_functions.h $(CFILES)
 
   .PHONY: omc_main_target clean bundle
 
   # This is to make sure that <%fileNamePrefix%>_*.c are always compiled.
-  .PHONY: $(CFILES)
+  .PHONY: $(CFILES) $(CXXFILES)
 
   omc_main_target: $(MAINOBJ) <%fileNamePrefix%>_functions.h <%fileNamePrefix%>_literals.h $(OFILES)
-  <%\t%>$(CC) -I. -o <%fileNamePrefix%>$(EXEEXT) $(MAINOBJ) $(OFILES) $(CPPFLAGS) $(DIREXTRA) <%libsPos1%> <%libsPos2%> $(CFLAGS) $(CPPFLAGS) $(LDFLAGS)
+  <%\t%><% if Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then '$(CXX)' else '$(CC)' %> -I. -o <%fileNamePrefix%>$(EXEEXT) $(MAINOBJ) $(OFILES) $(CPPFLAGS) $(DIREXTRA) <%libsPos1%> <%libsPos2%> $(CFLAGS) $(CPPFLAGS) $(LDFLAGS)
   <% if stringEq(Config.simCodeTarget(),"JavaScript") then '<%\t%>rm -f <%fileNamePrefix%>'%>
   <% if stringEq(Config.simCodeTarget(),"JavaScript") then '<%\t%>ln -s <%fileNamePrefix%>_node.js <%fileNamePrefix%>'%>
   <% if stringEq(Config.simCodeTarget(),"JavaScript") then '<%\t%>chmod +x <%fileNamePrefix%>_node.js'%>

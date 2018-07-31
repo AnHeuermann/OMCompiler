@@ -419,6 +419,9 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       {
         rt_tick(SIM_TIMER_ADOLC_INIT);
       }
+
+      init_modelica_external_functions();
+
       dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
 
       dasslData->adolcNumParam = 1 + data->modelData->nParametersReal +
@@ -455,6 +458,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       {
         rt_tick(SIM_TIMER_ADOLC_INIT);
       }
+      init_modelica_external_functions();
       //dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
       dasslData->adolcJac = NULL;
       dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal +
