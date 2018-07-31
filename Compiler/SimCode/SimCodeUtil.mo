@@ -635,7 +635,7 @@ algorithm
                                                               tmpSimVars.paramVars, tmpSimVars.intParamVars, tmpSimVars.boolParamVars,
                                                               filenamePrefix, funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars,
                                                               functions);
-      //MathOperation.dumpOperationData(modelOperationData);
+      MathOperation.dumpOperationData(modelOperationData);
       execStat("simCode: ADOLC createOperationData");
     else
       modelOperationData := {};

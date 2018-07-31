@@ -244,7 +244,7 @@ algorithm
 
     tmpOpData.name := modelName;
     tmpOpData.numRealParameters := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters);
-    tmpOpData.extFuncNames := createExternalFunctionData( workingArgs.extFuncNames, functionTree, simFunctions); 
+    tmpOpData.extFuncNames := createExternalFunctionData( workingArgs.extFuncNames, functionTree, simFunctions);
 
     if debug then
       print("Created operations for model: " + modelName +
@@ -1239,6 +1239,16 @@ algorithm
       //crefList = list(Expression.expCref(e) for e in expList);
       //opdList = list(OPERAND_VAR(BaseHashTable.get(cr, workingArgs.crefToSimVarHT)) for cr in crefList);
       //opds = listAppend(opdList,opds);
+    then (inExp, (opds, ops, workingArgs));
+
+    case (DAE.CALL(expLst=expList,attr=DAE.CALL_ATTR(ty=DAE.T_COMPLEX(complexClassType=ClassInf.RECORD(path)))))
+      equation
+        print("Explist of record: " + Absyn.pathString(path) + ExpressionDump.printExpListStr(expList)+ "\n");
+        crefList = list(Expression.expCref(e) for e in expList);
+        opdList = list(OPERAND_VAR(getSimVarWithIndexShift(cr, workingArgs)) for cr in crefList);
+        print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
+        opds = listAppend(opdList, opds);
+        print("Done!!!\n");
     then (inExp, (opds, ops, workingArgs));
 
     // BINARY
