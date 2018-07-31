@@ -22,7 +22,9 @@ import ExpressionDumpTpl;
   case simCode as SIMCODE(modelOperationData=modelOperationData, fileNamePrefix=fileNamePrefix) then
     let _ = (modelOperationData |> opData as OPERATIONDATA(name=name) => textFile(createAdolcTrace(opData), '<%name%>_aat.txt'))
     let _ = (modelOperationData |> opData as OPERATIONDATA(__) => createPatternFiles(opData))
-    let _ = (modelOperationData |> opData as OPERATIONDATA(extFuncNames=extFuncNames) => createExtFunctionsFile(fileNamePrefix, extFuncNames))
+    let _ =  match List.first(modelOperationData)
+                case OPERATIONDATA(extFuncNames=extFuncNames) then
+                    createExtFunctionsFile(fileNamePrefix, extFuncNames)
     <<>>
   end match 
 end generateAdolcAsciiTrace;
