@@ -215,7 +215,7 @@ let inputs = (extArgs |> arg hasindex i0 =>  match arg
                     case SimCodeFunction.SIMEXTARG(type_=T_COMPLEX(complexClassType=EXTERNAL_OBJ(__))) then
                     if isInput then
                         let typeStr = extType(type_, isInput, isArray)
-                        '<%extVarName(cref)%> = reinterpret_cast< <%typeStr%> > (static_cast<size_t> (dp_x[<%i0%>]));'
+                        'memcpy(&<%extVarName(cref)%>,&dp_x[<%i0%>],sizeof(<%typeStr%>));'
                     else
                         ''
                     case SimCodeFunction.SIMEXTARG(__) then
