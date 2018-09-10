@@ -176,9 +176,12 @@ protected uniontype WorkingStateArgs
     list<SimCode.NonlinearSystem> nlsSystems;
     Integer tmpIndex;
     Integer numRealVariables;
+    Integer numRealDiscreteVariables;
     Integer numIntVariables;
+    Integer numBoolVariables;
     Integer numRealParameters;
     Integer numIntParameters;
+    Integer numBoolParameters;
   end WORKINGSTATEARGS;
 end WorkingStateArgs;
 
@@ -188,6 +191,7 @@ public function createOperationData
   input list<SimCode.SimEqSystem> inEquations;
   input SimCode.HashTableCrefToSimVar crefToSimVarHT;
   input Integer numRealVariables;
+  input Integer numRealDiscreteVariables;
   input Integer numIntVariables;
   input Integer numBoolVariables;
   input list<SimCodeVar.SimVar> realParameters;
@@ -207,7 +211,7 @@ protected
   constant Boolean debug = false;
 algorithm
   try
-    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, {}, numRealVariables+numIntVariables+numBoolVariables, numRealVariables, numIntVariables, listLength(realParameters), listLength(intParameters));
+    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, {}, numRealVariables, numRealVariables, numRealDiscreteVariables, numIntVariables, numBoolVariables, listLength(realParameters), listLength(intParameters), listLength(boolParameters));
 
     if debug then
       print("# Equations: " + intString(listLength(inEquations)) + ".\n");
@@ -243,7 +247,8 @@ algorithm
     tmpOpData := setInDepAndDepVars(independents, dependents, tmpOpData);
 
     tmpOpData.name := modelName;
-    tmpOpData.numRealParameters := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters);
+    tmpOpData.numRealParameters := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters)+
+                                   numRealDiscreteVariables+numIntVariables+numBoolVariables;
     tmpOpData.extFuncNames := createExternalFunctionData( workingArgs.extFuncNames, functionTree, simFunctions);
 
     if debug then
@@ -335,7 +340,7 @@ protected
 algorithm
   // get function for funcName
   // create OperationData for single func
-  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, inWorkingArgs.extFuncNames, {}, 0, 0, 0, 0, 0);
+  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, inWorkingArgs.extFuncNames, {}, 0, 0, 0, 0, 0, 0, 0, 0);
   while not listEmpty(funcList) loop
     for funcName in funcList loop
 
@@ -371,7 +376,7 @@ algorithm
       localHT := List.fold(protectedSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
       numVars := listLength(inputSimVars) + listLength(outputSimVars) + listLength(protectedSimVars);
 
-      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, workingArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0);
+      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, workingArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 0, 0, 0);
 
       (optData, workingArgs) := createOperationsForFunction(bodyStmts, workingArgs, allFuncList, functionTree);
 
@@ -490,7 +495,7 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
     numVars := listLength(iterationSimVars)+listLength(resSimVars)+listLength(innerSimVars);    
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(inputSimVars), 0);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+listLength(simVarParams)+listLength(inputSimVars), 0, 0);
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
@@ -541,7 +546,7 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
     
     numVars := listLength(inputSimVars)+listLength(resSimVars)+listLength(innerSimVars);
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 1+listLength(simVarParams)+listLength(iterationSimVars), 0);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+listLength(simVarParams)+listLength(iterationSimVars), 0, 0);
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
@@ -990,10 +995,12 @@ protected function getSimVarWithIndexShift
   output Boolean handleAsParameter = false;
 protected
   Integer indexShift = 0;
+  Integer allParameters = 1 + workingArgs.numRealParameters + workingArgs.numIntParameters + workingArgs.numBoolParameters;
 algorithm
   simVar := BaseHashTable.get(inCref, workingArgs.crefToSimVarHT);
   _ := match(simVar.varKind)
     case (BackendDAE.PARAM()) algorithm
+      //print("Parameter SimVar : " + SimCodeUtil.simVarString(simVar) + "\n");
       _ := match(simVar.type_)
         case (DAE.T_REAL()) equation
           indexShift = 1;
@@ -1004,7 +1011,25 @@ algorithm
         case (DAE.T_BOOL()) equation
           indexShift = 1 + workingArgs.numRealParameters + workingArgs.numIntParameters;
         then ();
-        case (DAE.T_COMPLEX()) then ();
+        else equation
+          print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
+          Error.addInternalError("getSimVarAndIndex unhandled type!", sourceInfo());
+        then fail();
+      end match;
+      handleAsParameter := true;
+    then ();
+    case (BackendDAE.DISCRETE()) algorithm
+      //print("Discrete SimVar : " + SimCodeUtil.simVarString(simVar) + "\n");
+      _ := match(simVar.type_)
+        case (DAE.T_REAL()) equation
+          indexShift = allParameters - workingArgs.numRealVariables;
+        then ();
+        case (DAE.T_INTEGER()) equation
+          indexShift = allParameters + workingArgs.numRealDiscreteVariables;
+        then ();
+        case (DAE.T_BOOL()) equation
+          indexShift = allParameters + workingArgs.numRealDiscreteVariables + workingArgs.numIntVariables;
+        then ();
         else equation
           print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
           Error.addInternalError("getSimVarAndIndex unhandled type!", sourceInfo());
@@ -1017,6 +1042,7 @@ algorithm
         case (DAE.T_REAL()) equation
           indexShift = 0;
         then ();
+          /*
         case (DAE.T_INTEGER()) equation 
           indexShift = workingArgs.numRealVariables;
         then ();
@@ -1024,6 +1050,7 @@ algorithm
           indexShift = workingArgs.numRealVariables + workingArgs.numIntVariables;
         then ();
         case (DAE.T_COMPLEX()) then ();
+        */
         else equation
           print("SimVar : " + Types.printTypeStr(simVar.type_) + "\n");
           Error.addInternalError("getSimVarAndIndex unhandled type!", sourceInfo());
@@ -1032,6 +1059,7 @@ algorithm
     then ();
   end match;
   simVar.index := indexShift + simVar.index;
+  //print("SimVar Index: " + intString(simVar.index) + "\n");
 end getSimVarWithIndexShift;
 
 protected function generateOperandForExp

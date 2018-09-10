@@ -425,7 +425,8 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
 
       dasslData->adolcNumParam = 1 + data->modelData->nParametersReal +
-              data->modelData->nParametersInteger+data->modelData->nParametersBoolean;
+              data->modelData->nParametersInteger+data->modelData->nParametersBoolean+
+              data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean;
       dasslData->adolcParam = (double*) malloc(dasslData->adolcNumParam*sizeof(double));
       dasslData->adolcJacSeed = NULL;
       dasslData->adolcColoredJac = NULL;
@@ -461,8 +462,10 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       init_modelica_external_functions();
       //dasslData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
       dasslData->adolcJac = NULL;
-      dasslData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal +
-          data->modelData->nVariablesInteger+data->modelData->nParametersInteger)*sizeof(double));
+      dasslData->adolcNumParam = 1 + data->modelData->nParametersReal +
+              data->modelData->nParametersInteger+data->modelData->nParametersBoolean+
+              data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean;
+      dasslData->adolcParam = (double*) malloc(dasslData->adolcNumParam*sizeof(double));
       fprintf(stderr,"rows: %d cols: %d maxColors: %d\n",data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeRows,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeCols,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
       dasslData->adolcJacSeed = myalloc2(data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeCols,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
       dasslData->adolcColoredJac = myalloc2(data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeRows,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
@@ -657,12 +660,25 @@ int dassl_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
 
   if (initialParamCopy && dasslData->useAdolc){
     memcpy(dasslData->adolcParam+1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
-    /* copy integer value to parameter memory */
+    /* copy integer parameter values to parameter memory */
     for(i=0; i<data->modelData->nParametersInteger; i++){
       dasslData->adolcParam[1+data->modelData->nParametersReal+i] = data->simulationInfo->integerParameter[i];
     }
+    /* copy boolean parameter values to parameter memory */
     for(i=0; i<data->modelData->nParametersBoolean; i++){
       dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+i] = data->simulationInfo->booleanParameter[i];
+    }
+    /* copy discrete real values to parameter memory */
+    for(i=0; i<data->modelData->nDiscreteReal; i++){
+      dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+i] = data->localData[0]->realVars[data->modelData->nVariablesReal-data->modelData->nDiscreteReal+i];
+    }
+    /* copy integer variable values to parameter memory */
+    for(i=0; i<data->modelData->nVariablesInteger; i++){
+      dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+i] = data->localData[0]->integerVars[i];
+    }
+    /* copy boolean variable values to parameter memory */
+    for(i=0; i<data->modelData->nVariablesBoolean; i++){
+      dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+i] = data->localData[0]->booleanVars[i];
     }
     initialParamCopy = 0;
   }
@@ -682,6 +698,21 @@ int dassl_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
     dasslData->info[0] = 0;
     dasslData->idid = 0;
 
+    /* update adolc discrete variable values */
+    if (dasslData->useAdolc){
+      /* copy discrete real values to parameter memory */
+      for(i=0; i<data->modelData->nDiscreteReal; i++){
+        dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+i] = data->localData[0]->realVars[data->modelData->nVariablesReal-data->modelData->nDiscreteReal+i];
+      }
+      /* copy integer variable values to parameter memory */
+      for(i=0; i<data->modelData->nVariablesInteger; i++){
+        dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+i] = data->localData[0]->integerVars[i];
+      }
+      /* copy boolean variable values to parameter memory */
+      for(i=0; i<data->modelData->nVariablesBoolean; i++){
+        dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+i] = data->localData[0]->booleanVars[i];
+      }
+    }
   }
 
   /* Calculate steps until TOUT is reached */
