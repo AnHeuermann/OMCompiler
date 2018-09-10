@@ -1719,9 +1719,9 @@ end createEquationsForSystem;
 
 protected function addEquationsToLists
   input list<SimCode.SimEqSystem> inEq;
-  input array<Integer> stateeqnsmark;
-  input array<Integer> zceqnsmark;
-  input list<Integer> eqsIdx;
+  input Boolean bdynamic;
+  input Boolean bzceqns;
+  input Boolean skipDiscrete;
   input list<list<SimCode.SimEqSystem>> inOdeEquations;
   input list<list<SimCode.SimEqSystem>> inAlgebraicEquations;
   input list<list<SimCode.SimEqSystem>> inAllEquations;
@@ -1730,16 +1730,11 @@ protected function addEquationsToLists
   output list<list<SimCode.SimEqSystem>> outAlgebraicEquations;
   output list<list<SimCode.SimEqSystem>> outAllEquations;
   output list<list<SimCode.SimEqSystem>> outEquationsforZeroCrossings;
-protected
-  Boolean bdynamic "block is dynamic, belongs to dynamic section";
-  Boolean bzceqns "block needs to evaluate zeroCrossings";
 algorithm
-  bdynamic := BackendDAEUtil.blockIsDynamic(eqsIdx, stateeqnsmark);
-  bzceqns := BackendDAEUtil.blockIsDynamic(eqsIdx, zceqnsmark);
-  outOdeEquations := if bdynamic then inEq::inOdeEquations else inOdeEquations;
+  outOdeEquations := if bdynamic and not skipDiscrete then inEq::inOdeEquations else inOdeEquations;
   outAlgebraicEquations := if not bdynamic then inEq::inAlgebraicEquations else inAlgebraicEquations;
   outAllEquations := inEq::inAllEquations;
-  outEquationsforZeroCrossings := if bzceqns then inEq::inEquationsforZeroCrossings else inEquationsforZeroCrossings;
+  outEquationsforZeroCrossings := if bzceqns and not skipDiscrete then inEq::inEquationsforZeroCrossings else inEquationsforZeroCrossings;
 end addEquationsToLists;
 
 protected function createEquationsForSystem1
@@ -1760,26 +1755,32 @@ protected
   list<Integer> eqsIdx,varIdx;
   list<BackendDAE.Var> varlst;
   list<BackendDAE.Equation> eqnlst;
-  Boolean createAlgebraicEquations, bdynamic, skip;
+  Boolean createAlgebraicEquations, bdynamic, bzceqns, skip;
   Boolean debug = false;
 algorithm
   (stateeqnsmark, zceqnsmark, syst, shared, createAlgebraicEquations) := inArg;
   (uniqueEqIndex, odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings,
   tempvars, eqSccMapping, eqBackendSimCodeMapping, backendMapping, sccIndex) := inFold;
   (varlst,varIdx,eqnlst,eqsIdx) := BackendDAEUtil.getStrongComponentVarsAndEquations(comp, syst.orderedVars, syst.orderedEqs);
-  bdynamic := BackendDAEUtil.blockIsDynamic(eqsIdx, stateeqnsmark);
 
   skip := false;
+
+  // skip is when equations
+  skip := List.mapBoolAnd(eqnlst, BackendEquation.isWhenEquation);
+  // skip is discrete
+  skip := skip or List.mapBoolAnd(varlst, BackendVariable.isVarDiscrete);
+
+  // Do we need this equation in the ode block?
+  bdynamic := BackendDAEUtil.blockIsDynamic(eqsIdx, stateeqnsmark);
+  // Do we need this equation to detect zerocrossings?
+  bzceqns := BackendDAEUtil.blockIsDynamic(eqsIdx, zceqnsmark);
 
   if debug then
     print("Proceed component: " + BackendDump.strongComponentString(comp) + "\n");
     BackendDump.dumpEquationList(eqnlst,"Equations:");
     BackendDump.dumpVarList(varlst,"Variables:");
+    print("discrete equation: "+boolString(skip)+" \n");
   end if;
-  // skip is when equations
-  skip := List.mapBoolAnd(eqnlst, BackendEquation.isWhenEquation);
-  // skip is discrete
-  skip := skip or List.mapBoolAnd(varlst, BackendVariable.isVarDiscrete);
 
   outFold := match comp
     local
@@ -1792,6 +1793,7 @@ algorithm
       list<SimCode.SimEqSystem> equations1, noDiscEquations1;
       String message;
 
+    // case used for then inline solver, if "not createAlgebraicEquations = true"
     case _ guard not (createAlgebraicEquations or bdynamic) or skip and not createAlgebraicEquations
     then (uniqueEqIndex, odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings,
             tempvars, eqSccMapping, eqBackendSimCodeMapping, backendMapping, sccIndex);
@@ -1806,13 +1808,9 @@ algorithm
           eqBackendSimCodeMapping = appendSccIdxRange(firstEqIndex, uniqueEqIndex1 - 1, index, eqBackendSimCodeMapping);
           backendMapping = setEqMapping(List.intRange2(firstEqIndex, uniqueEqIndex1 - 1), {index}, backendMapping);
         end if;
-        if BackendEquation.isWhenEquation(BackendEquation.get(syst.orderedEqs, index)) then
-          allEquations = equations1::allEquations;
-        else
-          (odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings) =
-              addEquationsToLists(equations1, stateeqnsmark, zceqnsmark, {index}, odeEquations,
-                             algebraicEquations, allEquations, equationsforZeroCrossings);
-        end if;
+        (odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings) =
+          addEquationsToLists(equations1, bdynamic, bzceqns, skip, odeEquations,
+                              algebraicEquations, allEquations, equationsforZeroCrossings);
       then (uniqueEqIndex1, odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings,
             tempvars, eqSccMapping, eqBackendSimCodeMapping, backendMapping, sccIndex + 1);
 
@@ -1828,7 +1826,7 @@ algorithm
         eqBackendSimCodeMapping = appendSccIdxRange(uniqueEqIndex, uniqueEqIndex1 - 1, e, eqBackendSimCodeMapping);
 
         (odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings) =
-            addEquationsToLists(equations1, stateeqnsmark, zceqnsmark, {e}, odeEquations,
+            addEquationsToLists(equations1, bdynamic, bzceqns, skip, odeEquations,
                            algebraicEquations, allEquations, equationsforZeroCrossings);
       then
         (uniqueEqIndex1, odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings,
@@ -1845,7 +1843,7 @@ algorithm
         eqBackendSimCodeMapping = appendSccIdxRange(uniqueEqIndex, uniqueEqIndex1 - 1, e, eqBackendSimCodeMapping);
 
         (odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings) =
-            addEquationsToLists(equations1, stateeqnsmark, zceqnsmark, {e}, odeEquations,
+            addEquationsToLists(equations1, bdynamic, bzceqns, skip, odeEquations,
                            algebraicEquations, allEquations, equationsforZeroCrossings);
       then
         (uniqueEqIndex1, odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings,
@@ -1863,7 +1861,7 @@ algorithm
         eqBackendSimCodeMapping = appendSccIdxRange(uniqueEqIndex, uniqueEqIndex1 - 1, e, eqBackendSimCodeMapping);
 
         (odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings) =
-            addEquationsToLists(equations1, stateeqnsmark, zceqnsmark, {e}, odeEquations,
+            addEquationsToLists(equations1, bdynamic, bzceqns, skip, odeEquations,
                            algebraicEquations, allEquations, equationsforZeroCrossings);
       then
         (uniqueEqIndex1, odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings,
@@ -1898,7 +1896,7 @@ algorithm
         eqBackendSimCodeMapping = appendSccIdxRange(uniqueEqIndex, uniqueEqIndex1 - 1, index, eqBackendSimCodeMapping);
 
         (odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings) =
-            addEquationsToLists(equations1, stateeqnsmark, zceqnsmark, {e}, odeEquations,
+            addEquationsToLists(equations1, bdynamic, bzceqns, skip, odeEquations,
                            algebraicEquations, allEquations, equationsforZeroCrossings);
       then
         (uniqueEqIndex1, odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings,
@@ -1915,13 +1913,9 @@ algorithm
           eqBackendSimCodeMapping = appendSccIdxRange(firstEqIndex, uniqueEqIndex1 - 1, index, eqBackendSimCodeMapping);
           backendMapping = setEqMapping(List.intRange2(firstEqIndex, uniqueEqIndex1 - 1),{index}, backendMapping);
         end if;
-        if BackendEquation.isWhenEquation(BackendEquation.get(syst.orderedEqs, index)) then
-          allEquations = equations1::allEquations;
-        else
-          (odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings) =
-              addEquationsToLists(equations1, stateeqnsmark, zceqnsmark, {index}, odeEquations,
-                             algebraicEquations, allEquations, equationsforZeroCrossings);
-        end if;
+        (odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings) =
+          addEquationsToLists(equations1, bdynamic, bzceqns, skip, odeEquations,
+                              algebraicEquations, allEquations, equationsforZeroCrossings);
       then
         (uniqueEqIndex1, odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings, tempvars,
          eqSccMapping, eqBackendSimCodeMapping,backendMapping, sccIndex + 1);
@@ -1937,7 +1931,7 @@ algorithm
         //eqSccMapping = appendSccIdxRange(uniqueEqIndex, uniqueEqIndex1 - 1, sccIndex, eqSccMapping);
 
         (odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings) =
-            addEquationsToLists(noDiscEquations1, stateeqnsmark, zceqnsmark, eqnslst, odeEquations,
+          addEquationsToLists(noDiscEquations1, bdynamic, bzceqns, skip, odeEquations,
                            algebraicEquations, allEquations, equationsforZeroCrossings);
       then
         (uniqueEqIndex1, odeEquations, algebraicEquations, allEquations, equationsforZeroCrossings, tempvars,
