@@ -597,17 +597,18 @@ protected
 algorithm
   for elem in elmts loop
     _ := match elem
-    case DAE.VAR() algorithm
+    case DAE.VAR(ty=tp) algorithm
     cref := DAEUtil.varCref(elem);
     // UGLY work-a-round get type of var by creating empty exp of dims
-    (_, tp) := Expression.makeZeroExpression(elem.dims);
-    cref := ComponentReference.crefSetType(cref, tp);
-    //print("Create SimVars for Cref: " + ComponentReference.debugPrintComponentRefTypeStr(cref) + " tp: " + Types.unparseType(tp) +"\n");
+    //(_, tp) := Expression.makeZeroExpression(elem.dims);
+    //cref := ComponentReference.crefSetType(cref, tp);
+    print("Create SimVars for Cref: " + ComponentReference.debugPrintComponentRefTypeStr(cref) + " tp: " + Types.unparseType(tp) +"\n");
     //print("inst dims: " + Util.stringDelimitList(list(intString(i) for i in  Expression.dimensionsList(elem.dims)), ",") + "\n");
     _ := match cref
-      case (_) guard ComponentReference.isArrayElement(cref)
+      case (_) guard ComponentReference.isArrayElement(cref) or ComponentReference.isRecord(cref)
       algorithm
         tmpCrefs := ComponentReference.expandCref(cref, true);
+        tmpCrefs := listReverse(tmpCrefs);
         tmpExpLst := List.map(tmpCrefs, Expression.crefExp);
         tmpVars := SimCodeUtil.createArrayTempVar(cref, Expression.dimensionsList(elem.dims), tmpExpLst, {});
         simVars := listAppend(tmpVars, simVars);
@@ -1102,18 +1103,23 @@ protected
   list<DAE.Exp> exptmpLst;
 algorithm
   argsIndex := workingArgs.tmpIndex;
-  exptmpLst := List.mapFlat(inExpLst,Expression.flattenArrayExpToList);
+  exptmpLst := List.mapFlat(inExpLst,Expression.flattenArrayAndRecordsExpToList);
+  print("expList after flatten: " + ExpressionDump.printExpListStr(exptmpLst) + "\n");
   numArgs := listLength(exptmpLst);
   workingArgs.tmpIndex := workingArgs.tmpIndex + numArgs;
+  print("collectOperationsForFuncArgs operands: " + printOperandListStr(outOpds) +"\n");
+  print("collectOperationsForFuncArgs numArgs: " + intString(numArgs) +"\n");
   tmpOpds := listReverse(List.firstN(outOpds, numArgs));
+  print("collectOperationsForFuncArgs operands: " + printOperandListStr(tmpOpds) +"\n");
   outOpds := List.stripN(outOpds, numArgs);
+  print("collectOperationsForFuncArgs operands: " + printOperandListStr(outOpds) +"\n");
 
 
   for exp in exptmpLst loop
     assignOperand::tmpOpds := tmpOpds;
     (simVar, argsIndex) := createSimTmpVar(argsIndex, Expression.typeof(exp));
     simVarOperand := OPERAND_VAR(simVar);
-    //print("collectOperationsForFuncArgs exp: " + ExpressionDump.printExpListStr({exp}) + " operand: " + printOperandStr(assignOperand) +"\n");
+    print("collectOperationsForFuncArgs exp: " + ExpressionDump.printExpListStr({exp}) + " operand: " + printOperandStr(assignOperand) +"\n");
     op := match assignOperand
       case OPERAND_VAR()
       then OPERATION({assignOperand}, ASSIGN_ACTIVE(), simVarOperand);
@@ -1234,30 +1240,32 @@ algorithm
       opds = OPERAND_VAR(resVar)::opds;
     then (inExp, (opds, ops, workingArgs));
 
-    // CREF
-    case (DAE.CREF(componentRef=cref)) equation
-      (resVar, _) = getSimVarWithIndexShift(cref, workingArgs);
-      opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
-      opds = OPERAND_VAR(resVar)::opds;
-      // debug
-      //print("Start cref case: " + ExpressionDump.printExpStr(inExp) + "\n");
-      //print("Subs: " + ComponentReference.printComponentRef2Str("test", subs) + "\n");
-      //print("res Var cref: " + printOperandListStr(opds) + "\n");
-    then (inExp, (opds, ops, workingArgs));
-
     // CREF, array or record
     case (DAE.CREF(componentRef=cref))
       guard (Expression.isRecordType(ComponentReference.crefType(cref)) or
              Expression.isArrayType(ComponentReference.crefType(cref)))
     equation
-      //print("Start record case: " + ExpressionDump.printExpStr(inExp) + "\n");
+      print("Start record or array case: " + ExpressionDump.printExpStr(inExp) + "\n");
+      opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       expList = Expression.expandExpression(inExp);
+      expList = listReverse(expList);
       crefList = list(Expression.expCref(e) for e in expList);
       opdList = list(OPERAND_VAR(getSimVarWithIndexShift(cr, workingArgs)) for cr in crefList);
-      //print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
+      print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
       opds = listAppend(opdList, opds);
-    then fail();
-      //(inExp, (opds, ops, workingArgs));
+    then (inExp, (opds, ops, workingArgs));
+
+    // CREF
+    case (DAE.CREF(componentRef=cref)) equation
+      print("Start cref case: " + ExpressionDump.printExpStr(inExp) + "\n");
+      print("res Var cref: " + printOperandListStr(opds) + "\n");
+      (resVar, _) = getSimVarWithIndexShift(cref, workingArgs);
+      opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
+      opds = OPERAND_VAR(resVar)::opds;
+      // debug
+      print("Subs: " + ComponentReference.printComponentRef2Str("test", ComponentReference.crefSubs(cref)) + "\n");
+      print("res Var cref: " + printOperandListStr(opds) + "\n");
+    then (inExp, (opds, ops, workingArgs));
 
     // CALL, der
     case (DAE.CALL(path=Absyn.IDENT("der"))) equation
@@ -1277,11 +1285,11 @@ algorithm
 
     case (DAE.CALL(expLst=expList,attr=DAE.CALL_ATTR(ty=DAE.T_COMPLEX(complexClassType=ClassInf.RECORD(path)))))
       equation
-        print("Explist of record: " + Absyn.pathString(path) + ExpressionDump.printExpListStr(expList)+ "\n");
-        crefList = list(Expression.expCref(e) for e in expList);
-        opdList = list(OPERAND_VAR(getSimVarWithIndexShift(cr, workingArgs)) for cr in crefList);
-        print("Generated opds for record case: " + printOperandListStr(opdList) + "\n");
-        opds = listAppend(opdList, opds);
+        print("Explist of record: " + Absyn.pathString(path) + " " + ExpressionDump.printExpListStr(expList)+ "\n");
+        //print("collectOperation FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
+        print("collectOperation FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
+        //(_, opds, ops, workingArgs, _) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
+        //print("collectOperation FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
         print("Done!!!\n");
     then (inExp, (opds, ops, workingArgs));
 
@@ -1765,6 +1773,7 @@ algorithm
       ops = operation::ops;
     then (inExp, (opds, ops, workingArgs));
 
+
     // Modelica functions
     // CALL
     case (DAE.CALL(path=path, expLst=expList, attr=DAE.CALL_ATTR(ty=ty,builtin=false))) equation
@@ -1776,9 +1785,9 @@ algorithm
       //print("collectOperationsForFuncArgs pre opds : " +  printOperandListStr(opds) +"\n");
 
       // process all call armugments by with expList
-      //print("collectOperation FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
+      print("collectOperation FunctionArgs for exp : " + ExpressionDump.printExpListStr(expList) +"\n");
       (firstArg, opds, ops, workingArgs, numArgs) = collectOperationsForFuncArgs(expList, opds, ops, workingArgs);
-      //print("collectOperation FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
+      print("collectOperation FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
 
       (results, tmpIndex) = createOperandVarLst(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;

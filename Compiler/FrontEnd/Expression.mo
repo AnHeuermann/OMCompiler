@@ -3322,6 +3322,48 @@ algorithm
   end matchcontinue;
 end flattenArrayExpToList;
 
+public function flattenArrayAndRecordsExpToList "returns all non-array expressions of an array expression as a long list
+E.g. {[1,2;3,4],[4,5;6,7]} => {1,2,3,4,4,5,6,7}"
+  input DAE.Exp e;
+  output list<DAE.Exp> expLst;
+algorithm
+  expLst := matchcontinue(e)
+    local
+      list<DAE.Exp> expl;
+      list<list<DAE.Exp>> mexpl;
+      DAE.ComponentRef cr;
+      list<DAE.ComponentRef> crefs;
+    case(DAE.UNARY(operator=DAE.UMINUS_ARR(),exp=DAE.ARRAY(array=expl)))
+      equation
+        expl = List.flatten(List.map(expl,flattenArrayExpToList));
+        expLst = List.map(expl,negate);
+      then expLst;
+    case(DAE.ARRAY(array=expl))
+      equation
+        expLst = List.flatten(List.map(expl,flattenArrayExpToList));
+      then expLst;
+    case(DAE.UNARY(operator=DAE.UMINUS_ARR(),exp=DAE.MATRIX(matrix=mexpl)))
+      equation
+        expl = List.flatten(List.map(List.flatten(mexpl),flattenArrayExpToList));
+        expLst = List.map(expl,negate);
+      then expLst;
+    case(DAE.MATRIX(matrix=mexpl))
+      equation
+        expLst = List.flatten(List.map(List.flatten(mexpl),flattenArrayExpToList));
+      then expLst;
+    case(DAE.CREF(componentRef=cr))
+      equation
+        crefs = ComponentReference.expandCref(cr, true);
+        expl = list(crefExp(c) for c in crefs); 
+      then expl;
+    case _
+      equation
+        expl = splitRecord(e, typeof(e));
+    then expl;
+    else {e};
+  end matchcontinue;
+end flattenArrayAndRecordsExpToList;
+
 /***************************************************/
 /* generate  */
 /***************************************************/
