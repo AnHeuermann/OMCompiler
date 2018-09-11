@@ -271,7 +271,7 @@ int LinearSolverEdf::fos_forward(int iArrLen, int* iArr, int nin, int nout, int 
   // function() above
   info = klu_solve(symbolic,numeric,nb,1,b,&common);
   if (!info) {
-      printf("function: Error solving linear system of equations\n");
+      printf("fos_forward: Error solving linear system of equations\n");
       return 1;
   } else {
       common.status = 0;
@@ -393,7 +393,7 @@ int LinearSolverEdf::fov_forward(int iArrLen, int* iArr, int nin, int nout, int 
 
 #ifdef WITH_UMFPACK
   if (!info) {
-      printf("function: Error solving linear system of equations\n");
+      printf("fov_forward: Error solving linear system of equations\n");
       return 1;
   } else {
       common.status = 0;

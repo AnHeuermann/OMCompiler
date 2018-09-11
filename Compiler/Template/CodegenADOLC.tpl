@@ -172,7 +172,7 @@ int ModelicaExtFunc::fov_forward(int n, double *dp_x, int p, double **dpp_X, int
     for(int i =0; i<p; i++) {
          for (int j=0; j<n; j++)
              dp_X[j]=dpp_X[j][i];
-         int iret = fos_forward(n,dp_x,dpp_X[i],m,dp_y,dp_Y);
+         int iret = fos_forward(n,dp_x,dp_X,m,dp_y,dp_Y);
          for (int j=0; j<m; j++)
              dpp_Y[j][i] = dp_Y[j];
          MINDEC(ret,iret);
