@@ -6278,6 +6278,38 @@ algorithm
   outList := append_reverse(outList, rest);
 end deletePositionsSorted;
 
+public function deletePositionsSortedNoFail<T>
+  "Takes a list and a sorted list of positions (smallest index first), and
+   deletes the positions from the list. Note that positions are indexed from 0.
+     Example: deletePositionsSorted({1, 2, 3, 4, 5}, {0, 2, 3}) => {2, 5}"
+  input list<T> inList;
+  input list<Integer> inPositions;
+  output list<T> outList = {};
+protected
+  Integer i = 0;
+  T e;
+  list<T> rest = inList;
+algorithm
+  for pos in inPositions loop
+    while i <> pos loop
+      if listEmpty(rest) then
+        break;
+      end if;
+      e :: rest := rest;
+      outList := e :: outList;
+      i := i + 1;
+    end while;
+
+    if listEmpty(rest) then
+      break;
+    end if;
+    _ :: rest := rest;
+    i := i + 1;
+  end for;
+
+  outList := append_reverse(outList, rest);
+end deletePositionsSortedNoFail;
+
 public function removeMatchesFirst
   "Removes all matching integers that occur first in a list. If the first
    element doesn't match it returns the list."

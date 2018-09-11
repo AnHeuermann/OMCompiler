@@ -197,6 +197,7 @@ public function createOperationData
   input list<SimCodeVar.SimVar> realParameters;
   input list<SimCodeVar.SimVar> intParameters;
   input list<SimCodeVar.SimVar> boolParameters;
+  input Integer numExtObjects;
   input String modelName;
   input DAE.FunctionTree functionTree;
   input list<SimCodeVar.SimVar> independents;
@@ -248,7 +249,7 @@ algorithm
 
     tmpOpData.name := modelName;
     tmpOpData.numRealParameters := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters)+
-                                   numRealDiscreteVariables+numIntVariables+numBoolVariables;
+                                   numRealDiscreteVariables+numIntVariables+numBoolVariables+numExtObjects;
     tmpOpData.extFuncNames := createExternalFunctionData( workingArgs.extFuncNames, functionTree, simFunctions);
 
     if debug then
@@ -285,7 +286,7 @@ protected
 algorithm
   for x in inExtFuncNames loop
     (path, index) := x;
-    //print("Handle external functions: " + Absyn.pathString(path) + "\n");
+    print("Handle external functions: " + Absyn.pathString(path) + "\n");
     //func := DAEUtil.getNamedFunction(path, functionTree);
     (simFunc as SimCodeFunction.EXTERNAL_FUNCTION(extArgs=extArgs) ):= List.getMemberOnTrue(path, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
     
@@ -295,7 +296,7 @@ algorithm
       (simFunc2 as SimCodeFunction.EXTERNAL_FUNCTION(extArgs=extDerArgs)) := List.getMemberOnTrue(derivativeFunction, functions, SimCodeFunctionUtil.compareSimCodeFunctionPath);
       noDerArgsNum := list( Util.tuple21(x)-1 for x in conditionRefs);
       derArgs := list( ARGS_INDICES(i, x) threaded for x in extArgs, i in List.intRange2(0,listLength(extArgs)-1));
-      derArgs := List.deletePositionsSorted(derArgs, noDerArgsNum);
+      derArgs := List.deletePositionsSortedNoFail(derArgs, noDerArgsNum);
       derArgs := list( x for x guard Expression.isRealType(SimCodeFunctionUtil.getSimExtArgType(x.argument)) in derArgs);
       (_, derSimFuncArgs) := List.split(extDerArgs, listLength(extArgs));
       derArgs := list( ARGS_INDICES(y.index, x) threaded for x in derSimFuncArgs, y in derArgs);
@@ -1037,11 +1038,16 @@ algorithm
       end match;
       handleAsParameter := true;
     then ();
+    case (BackendDAE.EXTOBJ()) algorithm
+      indexShift := allParameters + workingArgs.numRealDiscreteVariables + workingArgs.numIntVariables + workingArgs.numBoolVariables;
+      handleAsParameter := true;
+    then ();
     else algorithm
       _ := match(simVar.type_)
         case (DAE.T_REAL()) equation
           indexShift = 0;
         then ();
+        case (DAE.T_COMPLEX()) then ();
           /*
         case (DAE.T_INTEGER()) equation 
           indexShift = workingArgs.numRealVariables;

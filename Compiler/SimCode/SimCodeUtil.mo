@@ -632,7 +632,7 @@ algorithm
       modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations),
                                                               crefToSimVarHT, 2*modelInfo.varInfo.numStateVars+modelInfo.varInfo.numAlgVars,
                                                               modelInfo.varInfo.numDiscreteReal, modelInfo.varInfo.numIntAlgVars, modelInfo.varInfo.numBoolAlgVars,
-                                                              tmpSimVars.paramVars, tmpSimVars.intParamVars, tmpSimVars.boolParamVars,
+                                                              tmpSimVars.paramVars, tmpSimVars.intParamVars, tmpSimVars.boolParamVars, modelInfo.varInfo.numExternalObjects,
                                                               filenamePrefix, funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars,
                                                               functions);
       MathOperation.dumpOperationData(modelOperationData);

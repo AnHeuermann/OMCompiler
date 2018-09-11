@@ -147,6 +147,10 @@ let extFuncInit = (extFuncNames |> funcNameTuple => createExtFuncInit(funcNameTu
 
 using std::forward_list;
 
+void update_ext_fct_memory(ext_diff_fct *edfct, int n, int m);
+
+extern "C" void init_modelica_external_functions();
+
 class ModelicaExtFunc : public EDFobject {
 public:
     ModelicaExtFunc() : EDFobject(){  }
@@ -157,6 +161,7 @@ public:
     virtual int fov_forward(int n, double *dp_x, int p, double **dpp_X, int m, double *dp_y, double **dpp_Y);
     virtual int fos_reverse(int m, double *dp_U, int n, double *dp_Z, double *dp_x, double *dp_y) {return 0;}
     virtual int fov_reverse(int m, int p, double **dpp_U, int n, double **dpp_Z, double *dp_x, double *dp_y) {return 0;}
+    friend void init_modelica_external_functions();
 };
 
 int ModelicaExtFunc::fov_forward(int n, double *dp_x, int p, double **dpp_X, int m, double *dp_y, double **dpp_Y) {
@@ -179,7 +184,7 @@ static forward_list<ModelicaExtFunc*> extfunclist;
 
 <%funcClassDecl%>
 
-extern "C" void init_modelica_external_functions() {
+void init_modelica_external_functions() {
     ModelicaExtFunc* fp;
     <%extFuncInit%>
 }
@@ -189,7 +194,7 @@ end createExternalFunctionCalls;
 template createExtFuncInit(tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer> funcTuple)
 ::=
 match funcTuple
-case (f as SimCodeFunction.EXTERNAL_FUNCTION(name=name,extArgs=extArgs, extReturn=extReturn),
+case (f as SimCodeFunction.EXTERNAL_FUNCTION(name=name,extArgs=extArgs,inVars=inVars,outVars=outVars, extReturn=extReturn),
       (derInputExtArgs,
         derf as  SimCodeFunction.EXTERNAL_FUNCTION(name=derName, extArgs= derExtArgs, extReturn=derExtReturn))
       , index
@@ -197,6 +202,7 @@ case (f as SimCodeFunction.EXTERNAL_FUNCTION(name=name,extArgs=extArgs, extRetur
 let nameStr = underscorePath(name)
 <<
 fp = new MEF_<%nameStr%>;
+update_ext_fct_memory(fp->edf, <%listLength(inVars)%>, <%listLength(outVars)%>);
 extfunclist.push_front(fp);
 assert(fp->get_index() == <%index%>);
 >>
