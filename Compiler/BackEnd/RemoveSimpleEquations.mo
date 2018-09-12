@@ -2513,6 +2513,7 @@ algorithm
        TIMEINDEPENTVAR(cr=cr, i=i, exp=exp, eqnAttributes=eqnAttributes) = s;
        arrayUpdate(simpleeqnsarr, r, setVisited(mark, s));
        (v as BackendDAE.VAR(varName=cr)) = BackendVariable.getVarAt(iVars, i);
+       v = BackendVariable.setVarKind(v, BackendDAE.DISCRETE());
        (replaceable_, replaceble1) = replaceableAlias(v, unReplaceable); // (isreplaceable, isNotInUnreplaceblaHashMap)
        (vars, shared, isState, eqnslst) = optMoveVarShared(replaceable_, v, i, eqnAttributes, exp, BackendVariable.addGlobalKnownVarDAE, iMT, iVars, ishared, iEqnslst);
        constExp = Expression.isConstValue(exp);
