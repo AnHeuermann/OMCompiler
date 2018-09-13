@@ -635,7 +635,9 @@ algorithm
                                                               tmpSimVars.paramVars, tmpSimVars.intParamVars, tmpSimVars.boolParamVars, modelInfo.varInfo.numExternalObjects,
                                                               filenamePrefix, funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars,
                                                               functions);
-      MathOperation.dumpOperationData(modelOperationData);
+      if Flags.isSet(Flags.DUMP_ADOLC_TRACE) then
+        MathOperation.dumpOperationData(modelOperationData);
+      end if;
       execStat("simCode: ADOLC createOperationData");
     else
       modelOperationData := {};
