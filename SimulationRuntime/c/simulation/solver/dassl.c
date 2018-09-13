@@ -427,7 +427,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       dasslData->adolcNumParam = 1 + data->modelData->nParametersReal +
               data->modelData->nParametersInteger+data->modelData->nParametersBoolean+
               data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean+
-              data->modelData->nExtObjs;
+              data->modelData->nExtObjs+data->modelData->nRelations+data->modelData->nVariablesReal;
       dasslData->adolcParam = (double*) malloc(dasslData->adolcNumParam*sizeof(double));
       dasslData->adolcJacSeed = NULL;
       dasslData->adolcColoredJac = NULL;
@@ -466,7 +466,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       dasslData->adolcNumParam = 1 + data->modelData->nParametersReal +
               data->modelData->nParametersInteger+data->modelData->nParametersBoolean+
               data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean+
-              data->modelData->nExtObjs;
+              data->modelData->nExtObjs+data->modelData->nRelations+data->modelData->nVariablesReal;
       dasslData->adolcParam = (double*) malloc(dasslData->adolcNumParam*sizeof(double));
       fprintf(stderr,"rows: %d cols: %d maxColors: %d\n",data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeRows,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeCols,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
       dasslData->adolcJacSeed = myalloc2(data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeCols,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
@@ -682,9 +682,14 @@ int dassl_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
     for(i=0; i<data->modelData->nVariablesBoolean; i++){
       dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+i] = data->localData[0]->booleanVars[i];
     }
-    /* copy boolean variable values to parameter memory */
+    /* copy external objects to parameter memory */
     for(i=0; i<data->modelData->nExtObjs; i++){
       memcpy(&dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean+i], &data->simulationInfo->extObjs[i], sizeof(void*));
+    }
+    /* copy all real start values to parameter memory */
+    for(i=0; i<data->modelData->nVariablesReal; i++){
+        dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean+data->modelData->nExtObjs+data->modelData->nRelations+i]
+        = data->modelData->realVarsData[i].attribute.start;
     }
     initialParamCopy = 0;
   }
@@ -712,11 +717,15 @@ int dassl_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
       }
       /* copy integer variable values to parameter memory */
       for(i=0; i<data->modelData->nVariablesInteger; i++){
-        dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+i] = data->localData[0]->integerVars[i];
+        dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+i] = (double)data->localData[0]->integerVars[i];
       }
       /* copy boolean variable values to parameter memory */
       for(i=0; i<data->modelData->nVariablesBoolean; i++){
-        dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+i] = data->localData[0]->booleanVars[i];
+        dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+i] = (double) data->localData[0]->booleanVars[i];
+      }
+      /* copy relation values to parameter memory */
+      for(i=0; i<data->modelData->nRelations; i++){
+        dasslData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean+data->modelData->nExtObjs+i] = (double) data->simulationInfo->relations[i];
       }
     }
   }

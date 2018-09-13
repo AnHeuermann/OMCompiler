@@ -32,7 +32,7 @@ end generateAdolcAsciiTrace;
 template createAdolcTrace(OperationData modelOperationData)
 ::=
   match modelOperationData
-    case operationData as OPERATIONDATA(maxTmpIndex=maxTmpIndex, independents=inds, dependents=deps, numRealParameters=numRealParameters) then
+    case operationData as OPERATIONDATA(maxTmpIndex=maxTmpIndex, independents=inds, dependents=deps, totalNumParameters=totalNumParameters) then
     let tmpIndex='<%maxTmpIndex%>'
     // states are independent variables
     let assign_ind = ""
@@ -46,7 +46,7 @@ template createAdolcTrace(OperationData modelOperationData)
     ;separator="\n")
 
     let death_not = '{ op:death_not loc:0 loc:<%maxTmpIndex%> }'
-    let num_real_param = '{ op:set_numparam loc:<%numRealParameters%> }'
+    let num_real_param = '{ op:set_numparam loc:<%totalNumParameters%> }'
     let operations = match modelOperationData
                       case operationData as
                                 OPERATIONDATA(operations=operations) then

@@ -162,7 +162,7 @@ public uniontype OperationData
     list<Integer> independents;
     list<Integer> dependents;
     String name;
-    Integer numRealParameters;
+    Integer totalNumParameters;
     list<LinSysPattern> linSysPat;
     list<tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer>> extFuncNames;
   end OPERATIONDATA;
@@ -182,6 +182,8 @@ protected uniontype WorkingStateArgs
     Integer numRealParameters;
     Integer numIntParameters;
     Integer numBoolParameters;
+    Integer numExtObjects;
+    Integer numRelations;
   end WORKINGSTATEARGS;
 end WorkingStateArgs;
 
@@ -198,6 +200,7 @@ public function createOperationData
   input list<SimCodeVar.SimVar> intParameters;
   input list<SimCodeVar.SimVar> boolParameters;
   input Integer numExtObjects;
+  input Integer numRelations;
   input String modelName;
   input DAE.FunctionTree functionTree;
   input list<SimCodeVar.SimVar> independents;
@@ -212,7 +215,7 @@ protected
   constant Boolean debug = false;
 algorithm
   try
-    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, {}, numRealVariables, numRealVariables, numRealDiscreteVariables, numIntVariables, numBoolVariables, listLength(realParameters), listLength(intParameters), listLength(boolParameters));
+    workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, {}, numRealVariables, numRealVariables, numRealDiscreteVariables, numIntVariables, numBoolVariables, listLength(realParameters), listLength(intParameters), listLength(boolParameters), numExtObjects, numRelations);
 
     if debug then
       print("# Equations: " + intString(listLength(inEquations)) + ".\n");
@@ -248,8 +251,9 @@ algorithm
     tmpOpData := setInDepAndDepVars(independents, dependents, tmpOpData);
 
     tmpOpData.name := modelName;
-    tmpOpData.numRealParameters := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters)+
-                                   numRealDiscreteVariables+numIntVariables+numBoolVariables+numExtObjects;
+    tmpOpData.totalNumParameters := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters)+
+                                   numRealDiscreteVariables+numIntVariables+numBoolVariables+numExtObjects+numRelations
+                                   + numRealVariables+numRealDiscreteVariables;
     tmpOpData.extFuncNames := createExternalFunctionData( workingArgs.extFuncNames, functionTree, simFunctions);
 
     if debug then
@@ -341,7 +345,7 @@ protected
 algorithm
   // get function for funcName
   // create OperationData for single func
-  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, inWorkingArgs.extFuncNames, {}, 0, 0, 0, 0, 0, 0, 0, 0);
+  workingArgs := WORKINGSTATEARGS(HashTableCrefSimVar.emptyHashTable(), {}, inWorkingArgs.extFuncNames, {}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   while not listEmpty(funcList) loop
     for funcName in funcList loop
 
@@ -377,7 +381,7 @@ algorithm
       localHT := List.fold(protectedSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
       numVars := listLength(inputSimVars) + listLength(outputSimVars) + listLength(protectedSimVars);
 
-      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, workingArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 0, 0, 0);
+      workingArgs := WORKINGSTATEARGS(localHT, workingArgs.funcNames, workingArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 0, 0, 0, 0,0);
 
       (optData, workingArgs) := createOperationsForFunction(bodyStmts, workingArgs, allFuncList, functionTree);
 
@@ -388,7 +392,7 @@ algorithm
 
       optData.name := Absyn.pathString(funcName, "_");
       
-      optData.numRealParameters := 0;
+      optData.totalNumParameters := 0;
       
       outOperationData := optData::outOperationData;
     end for;
@@ -496,13 +500,13 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
     numVars := listLength(iterationSimVars)+listLength(resSimVars)+listLength(innerSimVars);    
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+listLength(simVarParams)+listLength(inputSimVars), 0, 0);
-        
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+listLength(simVarParams)+listLength(inputSimVars), 0, 0, 0, 0);
+
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
     // set dep and indep  
     optData := setInDepAndDepVars(iterationSimVars, resSimVars, optData);
-    optData.numRealParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
+    optData.totalNumParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
     // set op data name
     optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_1";
   
@@ -515,7 +519,7 @@ algorithm
 
     // set dep and indep
     optData := setInDepAndDepVars(iterationSimVars, innerSimVars, optData);
-    optData.numRealParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
+    optData.totalNumParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
     // set op data name
     optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_3";
 
@@ -547,13 +551,13 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
     
     numVars := listLength(inputSimVars)+listLength(resSimVars)+listLength(innerSimVars);
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+listLength(simVarParams)+listLength(iterationSimVars), 0, 0);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+listLength(simVarParams)+listLength(iterationSimVars), 0, 0, 0, 0);
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
     // set dep and indep  
     optData := setInDepAndDepVars(inputSimVars, listAppend(resSimVars,innerSimVars), optData);
-    optData.numRealParameters := 1+listLength(simVarParams)+listLength(iterationSimVars);
+    optData.totalNumParameters := 1+listLength(simVarParams)+listLength(iterationSimVars);
     // set op data name
     optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_2";
   
@@ -1181,7 +1185,7 @@ algorithm
       list<DAE.Subscript> subs;
       DAE.Type ty;
       DAE.Operator op, tmpop;
-      Integer tmpIndex, numArgs, pathIndex;
+      Integer tmpIndex, numArgs, pathIndex, relationIndex, totalParamNum;
       Absyn.Ident ident;
       Absyn.Path path;
       Boolean isActive;
@@ -1220,10 +1224,14 @@ algorithm
     equation
       opds = List.stripN(opds, listLength(ComponentReference.crefSubs(cref)));
       // Start var;
-      (paramVar, true) = getSimVarWithIndexShift(cref, workingArgs);
+      (paramVar, _) = getSimVarWithIndexShift(cref, workingArgs);
       (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, ty);
       workingArgs.tmpIndex = tmpIndex;
-      operation = OPERATION({OPERAND_INDEX(paramVar.index+(workingArgs.numRealParameters+1))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
+      totalParamNum = 1+workingArgs.numRealParameters+workingArgs.numIntParameters+
+                        workingArgs.numBoolParameters+workingArgs.numRealDiscreteVariables+
+                        workingArgs.numIntVariables+workingArgs.numBoolVariables+
+                        workingArgs.numExtObjects+workingArgs.numRelations;
+      operation = OPERATION({OPERAND_INDEX(paramVar.index+(totalParamNum))}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
       ops = operation::ops;
       opds = OPERAND_VAR(resVar)::opds;
     then (inExp, (opds, ops, workingArgs));
@@ -1335,7 +1343,24 @@ algorithm
       workingArgs.tmpIndex = tmpIndex;
     then (inExp, (result::rest, ops, workingArgs));
 
-    // RELATION
+    // RELATION in a ZeroCrossing
+    case (DAE.RELATION(operator=op,index=relationIndex)) guard (relationIndex >= 0)
+    equation
+      opd2::opd1::rest = opds;
+      //print("collectOperation external FunctionArgs opds : " +  printOperandListStr(opds) +"\n");
+
+      (resVar, tmpIndex) = createSimTmpVar(workingArgs.tmpIndex, DAE.T_REAL_DEFAULT);
+      workingArgs.tmpIndex = tmpIndex;
+      totalParamNum = 1+workingArgs.numRealParameters+workingArgs.numIntParameters+
+                        workingArgs.numBoolParameters+workingArgs.numRealDiscreteVariables+
+                        workingArgs.numIntVariables+workingArgs.numBoolVariables+
+                        workingArgs.numExtObjects;
+      operation = OPERATION({OPERAND_INDEX(relationIndex+totalParamNum)}, ASSIGN_PARAM(), OPERAND_VAR(resVar));
+      ops = operation::ops;
+      opds = OPERAND_VAR(resVar)::rest;
+    then (inExp, (opds, ops, workingArgs));
+
+    // RELATION in a ZeroCrossing
     case (DAE.RELATION(operator=op)) equation
       opd2::opd1::rest = opds;
       (operation, result, tmpIndex) = createRelationOperation(op, {opd1,opd2}, workingArgs.tmpIndex);

@@ -1047,7 +1047,7 @@ package MathOperation
       list<Integer> independents;
       list<Integer> dependents;
       String name;
-      Integer numRealParameters;
+      Integer totalNumParameters;
       list<LinSysPattern> linSysPat;
       list<tuple<SimCodeFunction.Function, tuple<list<ArgsIndices>, SimCodeFunction.Function>, Integer>> extFuncNames;    end OPERATIONDATA;
   end OperationData;

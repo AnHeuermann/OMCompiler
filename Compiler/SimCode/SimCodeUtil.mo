@@ -632,7 +632,8 @@ algorithm
       modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations),
                                                               crefToSimVarHT, 2*modelInfo.varInfo.numStateVars+modelInfo.varInfo.numAlgVars,
                                                               modelInfo.varInfo.numDiscreteReal, modelInfo.varInfo.numIntAlgVars, modelInfo.varInfo.numBoolAlgVars,
-                                                              tmpSimVars.paramVars, tmpSimVars.intParamVars, tmpSimVars.boolParamVars, modelInfo.varInfo.numExternalObjects,
+                                                              tmpSimVars.paramVars, tmpSimVars.intParamVars, tmpSimVars.boolParamVars,
+                                                              modelInfo.varInfo.numExternalObjects, listLength(relations),
                                                               filenamePrefix, funcTree, tmpSimVars.stateVars, tmpSimVars.derivativeVars,
                                                               functions);
       if Flags.isSet(Flags.DUMP_ADOLC_TRACE) then

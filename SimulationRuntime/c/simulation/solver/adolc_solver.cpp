@@ -151,6 +151,31 @@ public:
 
 static std::forward_list<LinearSolverEdf> linSolEdfVec;
 
+void printMatrixCSR(int* Ap, int* Ai, double* Ax, int n)
+{
+  int i, j, k;
+  char *buffer = (char*)malloc(sizeof(char)*n*15);
+  k = 0;
+  for (i = 0; i < n; i++)
+  {
+    buffer[0] = 0;
+    for (j = 0; j < n; j++)
+    {
+      if ((k < Ap[i + 1]) && (Ai[k] == j))
+      {
+        sprintf(buffer, "%s %5.2g ", buffer, Ax[k]);
+        k++;
+      }
+      else
+      {
+        sprintf(buffer, "%s %5.2g ", buffer, 0.0);
+      }
+    }
+    printf("%s\n", buffer);
+  }
+  free(buffer);
+}
+
 int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
 
   // nin == 2 and nout == 1
@@ -175,6 +200,7 @@ int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *in
       for (int p = 0 ; p < Ap [nb] ; p++) A [p] = 0 ;
       for (int k = 0 ; k < nnz ; k++) A [Map [k]] += x[0][k] ;
   }
+
   if ( symbolic == NULL ) {
       symbolic = klu_analyze(nb,Ap,Ai,&common);
    }
