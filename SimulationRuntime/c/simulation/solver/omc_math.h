@@ -116,5 +116,6 @@ void _omc_printMatrix(_omc_matrix* mat, const char* name, const int logLevel);
 /* norm functions */
 _omc_scalar _omc_euclideanVectorNorm(const _omc_vector* vec);
 _omc_scalar _omc_maximumVectorNorm(const _omc_vector* vec);
+_omc_scalar _omc_maximumMatrixNorm(const _omc_matrix* mat);
 
 #endif

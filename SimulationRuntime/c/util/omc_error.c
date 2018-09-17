@@ -57,6 +57,7 @@ const char *LOG_STREAM_NAME[SIM_LOG_MAX] = {
   "LOG_IPOPT_HESSE",
   "LOG_IPOPT_ERROR",
   "LOG_JAC",
+  "LOG_JAC_TEST",
   "LOG_LS",
   "LOG_LS_V",
   "LOG_NLS",
@@ -104,6 +105,7 @@ const char *LOG_STREAM_DESC[SIM_LOG_MAX] = {
   "check hessian matrix with Ipopt",                                            /* LOG_IPOPT_HESSE*/
   "print max error in the optimization",                                        /* LOG_IPOPT_ERROR*/
   "outputs the jacobian matrix used by dassl",                                  /* LOG_JAC */
+  "compares the selected jacobian matrix and the numerical",                    /* LOG_JAC_TEST */
   "logging for linear systems",                                                 /* LOG_LS */
   "verbose logging of linear systems",                                          /* LOG_LS_V */
   "logging for nonlinear systems",                                              /* LOG_NLS */

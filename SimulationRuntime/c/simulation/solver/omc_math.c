@@ -826,3 +826,32 @@ _omc_scalar _omc_maximumVectorNorm(const _omc_vector* vec)
 
   return result;
 }
+
+/*! \fn _omc_scalar _omc_maximumMatrixNorm(_omc_matrix* vec)
+ *
+ *  calculates the maximum vector norm
+ *
+ *  \param [ref] [vec] !TODO: DESCRIBE ME!
+ */
+_omc_scalar _omc_maximumMatrixNorm(const _omc_matrix* mat)
+{
+  _omc_size i, j;
+  _omc_scalar result = 0, tmp;
+  assertStreamPrint(NULL, mat->rows > 0, "Matrix rows is greater the zero");
+  assertStreamPrint(NULL, mat->cols > 0, "Matrix cols is greater the zero");
+  assertStreamPrint(NULL, NULL != mat->data, "matrix data is NULL pointer");
+
+  for (i = 0; i < mat->rows; ++i)
+  {
+    for (j = 0; j < mat->cols; ++j)
+    {
+      tmp = fabs( _omc_getMatrixElement((_omc_matrix*) mat, i, j));
+      if (result < tmp)
+      {
+        result = tmp;
+      }
+    }
+  }
+
+  return result;
+}

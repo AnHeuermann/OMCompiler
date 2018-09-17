@@ -234,6 +234,9 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
   data->simulationInfo->currentContext = CONTEXT_ALGEBRAIC;
 
   dasslData->useAdolc = 0;
+  if(ACTIVE_STREAM(LOG_JAC_TEST)){
+    dasslData->testJac = (double*) malloc(N*N*sizeof(double));
+  }
 
   /* ### start configuration of dassl ### */
   infoStreamPrint(LOG_SOLVER, 1, "Configuration of the dassl code:");
@@ -441,11 +444,6 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       //sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
       read_ascii_trace(filename, data->simulationInfo->adolcTag);
       //printf("ADOL-C tag: %d", data->simulationInfo->adolcTag);
-      //tapestats(0,stats);
-      //dasslData->adolc_num_params = stats[NUM_PARAM];
-      //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
-      //write_ascii_trace(filename2, data->simulationInfo->adolcTag);
-      //dasslData->residualFunction = functionODE_residualADOLC;
       dasslData->jacobianFunction =  JacobianADOLC;
       if(measure_time_flag)
       {
@@ -478,13 +476,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
       initialize_nonLinearSystems(data, &data->simulationInfo->adolcTag );
 
       sprintf(filename, "%s_aat.txt", data->modelData->modelFilePrefix);
-      //sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
       read_ascii_trace(filename, data->simulationInfo->adolcTag);
-      //tapestats(0,stats);
-      //dasslData->adolc_num_params = stats[NUM_PARAM];
-      //fprintf(stderr, "Numparams: %d\n", dasslData->adolc_num_params);
-      //write_ascii_trace(filename2, 0);
-      //dasslData->residualFunction = functionODE_residualADOLC;
       dasslData->jacobianFunction =  jacobianADOLCColored;
       if(measure_time_flag)
       {
@@ -567,6 +559,9 @@ int dassl_deinitial(DASSL_DATA *dasslData)
       myfree2(dasslData->adolcJacSeed);
   if (dasslData->useAdolc && dasslData->adolcColoredJac)
       myfree2(dasslData->adolcColoredJac);
+  if(ACTIVE_STREAM(LOG_JAC_TEST)){
+    free(dasslData->testJac);
+  }
   free(dasslData);
 
   TRACE_POP
@@ -1299,6 +1294,7 @@ int jacA_numColored(double *t, double *y, double *yprime, double *delta, double 
   return 0;
 }
 
+
 /* \fn callJacobian(double *t, double *y, double *yprime, double *deltaD, double *pd, double *cj, double *h, double *wt,
    double *rpar, int* ipar)
  *
@@ -1331,6 +1327,23 @@ static int callJacobian(double *t, double *y, double *yprime, double *deltaD, do
     _omc_matrix* dumpJac = _omc_createMatrix(dasslData->N, dasslData->N, pd);
     _omc_printMatrix(dumpJac, "DASSL-Solver: Matrix A", LOG_JAC);
     _omc_destroyMatrix(dumpJac);
+  }
+
+  if(ACTIVE_STREAM(LOG_JAC_TEST))
+  {
+    int n = dasslData->N;
+    double matError;
+    _omc_matrix* diffJac = _omc_createMatrix(n, n, dasslData->testJac);
+    _omc_matrix* jac = _omc_createMatrix(n, n, pd);
+
+    /* get numerical jacobian -> dasslData->testJac */
+    jacA_num(t, y, yprime, deltaD, dasslData->testJac, cj, h, wt, rpar, ipar);
+
+    /* compare the selected jacobian and the numerical */
+    diffJac = _omc_subtractMatrixMatrix(diffJac, jac);
+    matError = _omc_maximumMatrixNorm(diffJac);
+    if (matError > 0.1)
+      infoStreamPrint(LOG_STDOUT, 0, "error between the selected and then numerical jacobian = %f", matError);
   }
 
   int i,j = 0;
@@ -1516,7 +1529,6 @@ int functionODE_residualADOLC(double *t, double *y, double *yd, double* cj, doub
   TRACE_POP
   return 0;
 }
-
 
 #ifdef __cplusplus
 }
