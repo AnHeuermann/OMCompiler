@@ -56,6 +56,7 @@
 
 #include <adolc/adolc.h>
 #include <adolc/tapedoc/asciitapes.h>
+#include "simulation/solver/adolc_solver.h"
 
 #ifdef WITH_SUNDIALS
 
@@ -91,6 +92,10 @@ static int callSparseJacobian(realtype tt, realtype cj,
     N_Vector tmp1, N_Vector tmp2, N_Vector tmp3);
 
 static int jacobianSparseADOLC(realtype tt, realtype cj,
+    N_Vector yy, N_Vector yp, N_Vector rr, SlsMat Jac, void *user_data,
+    N_Vector tmp1, N_Vector tmp2, N_Vector tmp3);
+
+static int jacobianSparseADOLCColored(realtype tt, realtype cj,
     N_Vector yy, N_Vector yp, N_Vector rr, SlsMat Jac, void *user_data,
     N_Vector tmp1, N_Vector tmp2, N_Vector tmp3);
 
@@ -455,6 +460,7 @@ ida_solver_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo
   /* in daeMode sparse pattern is already initialized in DAEMODE_DATA */
   if(!idaData->daeMode && (idaData->jacobianMethod == COLOREDNUMJAC ||
       idaData->jacobianMethod == COLOREDSYMJAC ||
+      idaData->jacobianMethod == ADOLC ||
       idaData->jacobianMethod == ADOLCSPARSE ||
       idaData->jacobianMethod == SYMJAC))
   {
@@ -510,28 +516,48 @@ ida_solver_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo
     case COLOREDNUMJAC:
       flag = IDASlsSetSparseJacFn(idaData->ida_mem, callSparseJacobian);
       break;
+    case ADOLC:
     case ADOLCSPARSE:
 
       if(measure_time_flag)
       {
         rt_tick(SIM_TIMER_ADOLC_INIT);
       }
+      idaData->useAdolc = 1;
+      /* alloc adolc */
+      data->simulationInfo->adolcTag = 0;
+
+      init_modelica_external_functions();
+
       idaData->adolcJac = myalloc2(data->modelData->nStates, data->modelData->nStates);
-      idaData->adolcParam = (double*) malloc((1+data->modelData->nParametersReal)*sizeof(double));
-      memcpy(idaData->adolcParam +1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
+      idaData->adolcNumParam = 1 + data->modelData->nParametersReal +
+              data->modelData->nParametersInteger+data->modelData->nParametersBoolean+
+              data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean+
+              data->modelData->nExtObjs+data->modelData->nRelations+data->modelData->nVariablesReal;
+      idaData->adolcParam = (double*) malloc(idaData->adolcNumParam*sizeof(double));
+      if (idaData->jacobianMethod == ADOLCSPARSE){
+        fprintf(stderr,"rows: %d cols: %d maxColors: %d\n",data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeRows,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeCols,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
+        idaData->adolcJacSeed = myalloc2(data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeCols,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
+        idaData->adolcColoredJac = myalloc2(data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sizeRows,data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A].sparsePattern.maxColors);
+      }else {
+        idaData->adolcJacSeed = NULL;
+        idaData->adolcColoredJac = NULL;
+      }
+
+      // allocate memory for linear systems
+      initialize_linearSystems(data);
+      // allocate memory for non-linear systems
+      initialize_nonLinearSystems(data, &data->simulationInfo->adolcTag );
 
       sprintf(filename, "%s_aat.txt", data->modelData->modelFilePrefix);
-      read_ascii_trace(filename, 0);
+      read_ascii_trace(filename, data->simulationInfo->adolcTag);
 
-      /* debug
-      sprintf(filename2, "%s_adolcAsciiTrace2.txt", data->modelData->modelFilePrefix);
-      tapestats(0,stats);
-      numparam = stats[NUM_PARAM];
-      fprintf(stderr, "Numparams: %d\n", numparam);
-      write_ascii_trace(filename2, 0);
-      */
+      if (idaData->jacobianMethod == ADOLCSPARSE){
+        flag = IDASlsSetSparseJacFn(idaData->ida_mem, jacobianSparseADOLCColored);
+      }else {
+        flag = IDASlsSetSparseJacFn(idaData->ida_mem, jacobianSparseADOLC);
+      }
 
-      flag = IDASlsSetSparseJacFn(idaData->ida_mem, jacobianSparseADOLC);
       if(measure_time_flag)
       {
         rt_accumulate(SIM_TIMER_ADOLC_INIT);
@@ -845,6 +871,7 @@ ida_solver_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
   static unsigned int stepsOutputCounter = 1;
   int stepsMode;
   int restartAfterLSFail = 0;
+  static int initialParamCopy = 1;
 
   if (measure_time_flag) rt_tick(SIM_TIMER_SOLVER);
 
@@ -854,6 +881,40 @@ ida_solver_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
   SIMULATION_DATA *sDataOld = data->localData[1];
   MODEL_DATA *mData = (MODEL_DATA*) data->modelData;
 
+  /* initial copy of adolc variables */
+  if (initialParamCopy && idaData->useAdolc){
+    memcpy(idaData->adolcParam+1, data->simulationInfo->realParameter, sizeof(double)*data->modelData->nParametersReal);
+    /* copy integer parameter values to parameter memory */
+    for(i=0; i<data->modelData->nParametersInteger; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+i] = data->simulationInfo->integerParameter[i];
+    }
+    /* copy boolean parameter values to parameter memory */
+    for(i=0; i<data->modelData->nParametersBoolean; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+i] = data->simulationInfo->booleanParameter[i];
+    }
+    /* copy discrete real values to parameter memory */
+    for(i=0; i<data->modelData->nDiscreteReal; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+i] = data->localData[0]->realVars[data->modelData->nVariablesReal-data->modelData->nDiscreteReal+i];
+    }
+    /* copy integer variable values to parameter memory */
+    for(i=0; i<data->modelData->nVariablesInteger; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+i] = data->localData[0]->integerVars[i];
+    }
+    /* copy boolean variable values to parameter memory */
+    for(i=0; i<data->modelData->nVariablesBoolean; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+i] = data->localData[0]->booleanVars[i];
+    }
+    /* copy external objects to parameter memory */
+    for(i=0; i<data->modelData->nExtObjs; i++){
+      memcpy(&idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean+i], &data->simulationInfo->extObjs[i], sizeof(void*));
+    }
+    /* copy all real start values to parameter memory */
+    for(i=0; i<data->modelData->nVariablesReal; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean+data->modelData->nExtObjs+data->modelData->nRelations+i]
+        = data->modelData->realVarsData[i].attribute.start;
+    }
+    initialParamCopy = 0;
+  }
 
   /* alloc all work arrays */
   if (!idaData->daeMode)
@@ -871,6 +932,26 @@ ida_solver_step(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo)
   if (!idaData->setInitialSolution)
   {
     debugStreamPrint(LOG_SOLVER, 0, "Re-initialized IDA Solver");
+
+    /* update adolc discrete variable values */
+    if (idaData->useAdolc){
+      /* copy discrete real values to parameter memory */
+      for(i=0; i<data->modelData->nDiscreteReal; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+i] = data->localData[0]->realVars[data->modelData->nVariablesReal-data->modelData->nDiscreteReal+i];
+      }
+      /* copy integer variable values to parameter memory */
+      for(i=0; i<data->modelData->nVariablesInteger; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+i] = (double)data->localData[0]->integerVars[i];
+      }
+      /* copy boolean variable values to parameter memory */
+      for(i=0; i<data->modelData->nVariablesBoolean; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+i] = (double) data->localData[0]->booleanVars[i];
+      }
+      /* copy relation values to parameter memory */
+      for(i=0; i<data->modelData->nRelations; i++){
+        idaData->adolcParam[1+data->modelData->nParametersReal+data->modelData->nParametersInteger+data->modelData->nParametersBoolean+data->modelData->nDiscreteReal+data->modelData->nVariablesInteger+data->modelData->nVariablesBoolean+data->modelData->nExtObjs+i] = (double) data->simulationInfo->relations[i];
+      }
+    }
 
     /* initialize states and der(states) */
     if (idaData->daeMode)
@@ -2136,6 +2217,101 @@ int idaReScaleData(IDA_SOLVER *idaData)
 /*
  * provides adolc jacobian to be used with ida
  */
+static int jacobianSparseADOLCColored(double tt, double cj,
+    N_Vector yy, N_Vector yp, N_Vector rr,
+    SlsMat Jac, void *user_data,
+    N_Vector tmp1, N_Vector tmp2, N_Vector tmp3)
+{
+  TRACE_PUSH
+  IDA_SOLVER* idaData = (IDA_SOLVER*)user_data;
+  DATA* data = (DATA*)(((IDA_USERDATA*)idaData->simData)->data);
+  threadData_t* threadData = (threadData_t*)(((IDA_USERDATA*)((IDA_SOLVER*)user_data)->simData)->threadData);
+  int i, temp1, temp2, colsum = 0;
+  static unsigned int *rows = NULL;
+  static unsigned int *cols = NULL;
+  static double *values = NULL;
+  static int nnz;
+  int options[4] = { 0,1,0,0 };
+  double *y = N_VGetArrayPointer(yy);
+
+  const int index = data->callback->INDEX_JAC_A;
+  ANALYTIC_JACOBIAN* omcJac = &data->simulationInfo->analyticJacobians[data->callback->INDEX_JAC_A];
+  unsigned int j,l,k,ii;
+
+  SlsSetToZero(Jac);
+
+  /* tick */
+  if(measure_time_flag)
+  {
+    rt_tick(SIM_TIMER_JACOBIAN);
+  }
+
+  for(i=0; i < omcJac->sparsePattern.maxColors; i++)
+  {
+    for(ii=0; ii < omcJac->sizeCols; ii++)
+      if(omcJac->sparsePattern.colorCols[ii]-1 == i)
+        idaData->adolcJacSeed[ii][i] = 1;
+  }
+
+  double *result = myalloc1(idaData->N);
+
+  idaData->adolcParam[0] = tt;
+  set_param_vec(data->simulationInfo->adolcTag, idaData->adolcNumParam, idaData->adolcParam);
+  fov_forward(data->simulationInfo->adolcTag, idaData->N, idaData->N,
+              omcJac->sparsePattern.maxColors,
+              y, idaData->adolcJacSeed, result, idaData->adolcColoredJac);
+
+  myfree1(result);
+
+  for(i=0; i < omcJac->sparsePattern.maxColors; i++)
+  {
+    for(j = 0; j < omcJac->sizeCols; j++)
+    {
+      if(idaData->adolcJacSeed[j][i] == 1)
+      {
+        ii = omcJac->sparsePattern.leadindex[j];
+        while(ii < omcJac->sparsePattern.leadindex[j+1])
+        {
+          l  = omcJac->sparsePattern.index[ii];
+          setJacElementKluSparse(l, j, idaData->adolcColoredJac[l][i], ii, Jac);
+          ii++;
+        };
+      }
+    }
+  }
+  finishSparseColPtr(Jac, omcJac->sparsePattern.numberOfNoneZeros);
+
+  /* tock */
+  if(measure_time_flag)
+  {
+    rt_accumulate(SIM_TIMER_JACOBIAN);
+  }
+
+  /* debug */
+  if (ACTIVE_STREAM(LOG_JAC)){
+    infoStreamPrint(LOG_JAC, 0, "##IDA## Sparse ADOLC Matrix");
+    PrintSparseMat(Jac);
+  }
+
+  /* add cj to diagonal elements and store in Jac */
+  if (!idaData->daeMode)
+  {
+    for (i=0; i < idaData->N; ++i){
+      idaData->tmpJac->colptrs[i] = i;
+      idaData->tmpJac->rowvals[i] = i;
+      idaData->tmpJac->data[i] = -cj;
+    }
+    idaData->tmpJac->colptrs[idaData->N] = idaData->N;
+    SlsAddMat(Jac, idaData->tmpJac);
+  }
+
+  TRACE_POP
+  return 0;
+}
+
+/*
+ * provides adolc jacobian to be used with ida
+ */
 static int jacobianSparseADOLC(double tt, double cj,
     N_Vector yy, N_Vector yp, N_Vector rr,
     SlsMat Jac, void *user_data,
@@ -2156,18 +2332,20 @@ static int jacobianSparseADOLC(double tt, double cj,
 
   SlsSetToZero(Jac);
 
+
   /* set time variable parameter */
   idaData->adolcParam[0] = tt;
 
   /* the first argument is the same number as in function name after system */
   /* jacobian contains the derivatives of $P$DER$Px w.r.t $Px and */
-  set_param_vec(0, data->modelData->nParametersReal+1, idaData->adolcParam);
+  set_param_vec(0, idaData->adolcNumParam, idaData->adolcParam);
 
   /* tick */
   if(measure_time_flag)
   {
     rt_tick(SIM_TIMER_JACOBIAN);
   }
+
   sparse_jac(0, idaData->N, idaData->N, repeat, y, &nnz,
              &rows, &cols, &values, options);
 

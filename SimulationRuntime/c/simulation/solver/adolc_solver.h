@@ -34,6 +34,8 @@
 #ifndef ADOLC_SOLVER_H
 #define ADOLC_SOLVER_H
 
+#include "simulation_data.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -45,6 +47,12 @@ unsigned int alloc_adolc_nonlin_sol(char* fbase,int nx, int ny1, int ny2,short* 
 double *adolc_nonlin_sol_get_values_buffer(int index);
 
 void init_modelica_external_functions();
+
+void setAllNonLinearIterationVars(DATA *data);
+void initialize_nonLinearSystems(DATA *data, short* usertag);
+void initialize_linearSystems(DATA *data);
+
+
 
 #ifdef __cplusplus
 }

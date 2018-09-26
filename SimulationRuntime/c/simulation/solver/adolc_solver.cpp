@@ -938,3 +938,57 @@ double *adolc_nonlin_sol_get_values_buffer(int index) {
     NonLinearSolverEdf* edf = reinterpret_cast<NonLinearSolverEdf*>(estruct->obj);
     return edf->data->x;
 }
+
+void initialize_linearSystems(DATA *data)
+{
+    LINEAR_SYSTEM_DATA *lsData = data->simulationInfo->linearSystemData;
+    int i;
+    unsigned int outIdx;
+        char filename[128];
+    for(i=0; i <data->modelData->nLinearSystems; i++)
+    {
+        if (lsData[i].adolcIndex>=0){
+                    sprintf(filename, "%s_ls_%ld_pat.txt", data->modelData->modelFilePrefix, lsData[i].adolcIndex);
+          outIdx = alloc_adolc_lin_sol(filename, lsData[i].nnz, lsData[i].size, lsData[i].size);
+          if (outIdx != lsData[i].adolcIndex){
+              errorStreamPrint(LOG_STDOUT, 0, "ADOLC Linear System Index does not match! %u != %ld", outIdx, lsData[i].adolcIndex);
+          }
+          infoStreamPrint(LOG_SOLVER_V, 0, "Adolc linear system outIndex %u", outIdx);
+        }
+    }
+}
+
+void initialize_nonLinearSystems(DATA *data, short* usertag)
+{
+    NONLINEAR_SYSTEM_DATA *nlsData = data->simulationInfo->nonlinearSystemData;
+    char filename[128];
+    int i;
+    unsigned int outIdx;
+    for(i=0; i <data->modelData->nNonLinearSystems; i++)
+    {
+        if (nlsData[i].adolcIndex>=0){
+
+          sprintf(filename, "%s_nls_%ld", data->modelData->modelFilePrefix, nlsData[i].adolcIndex);
+          outIdx = alloc_adolc_nonlin_sol(filename, nlsData[i].size_inputVars, nlsData[i].size_innerVars, nlsData[i].size, usertag);
+          if (outIdx != nlsData[i].adolcIndex){
+              errorStreamPrint(LOG_STDOUT, 0, "ADOLC non-linear system index does not match! %u != %ld", outIdx, nlsData[i].adolcIndex);
+          }
+          infoStreamPrint(LOG_SOLVER_V, 0, "Adolc non-linear system outIndex %u", outIdx);
+        }
+    }
+}
+
+void setAllNonLinearIterationVars(DATA *data)
+{
+    NONLINEAR_SYSTEM_DATA *nlsData = data->simulationInfo->nonlinearSystemData;
+    double *buffer;
+    int i;
+    unsigned int outIdx;
+    for(i=0; i <data->modelData->nNonLinearSystems; i++)
+    {
+        if (nlsData[i].adolcIndex>=0){
+            buffer = adolc_nonlin_sol_get_values_buffer(nlsData[i].adolcIndex);
+            nlsData[i].getIterationVars(data, buffer);
+        }
+    }
+}
