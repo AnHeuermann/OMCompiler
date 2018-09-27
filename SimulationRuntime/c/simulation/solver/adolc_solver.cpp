@@ -992,3 +992,5 @@ void setAllNonLinearIterationVars(DATA *data)
         }
     }
 }
+
+void init_modelica_external_functions(){};
