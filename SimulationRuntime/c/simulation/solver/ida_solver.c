@@ -167,6 +167,7 @@ ida_solver_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo
 
   /* initialize constants */
   idaData->setInitialSolution = 0;
+  idaData->useAdolc = 0;
 
   /* start initialization routines of sundials */
   idaData->ida_mem = IDACreate();
