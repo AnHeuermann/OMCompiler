@@ -324,6 +324,7 @@ int dassl_initial(DATA* data, threadData_t *threadData, SOLVER_INFO* solverInfo,
   /* selects the calculation method of the jacobian */
   if(dasslData->dasslJacobian == COLOREDNUMJAC ||
      dasslData->dasslJacobian == COLOREDSYMJAC ||
+     dasslData->dasslJacobian == ADOLC ||
      dasslData->dasslJacobian == ADOLCSPARSE ||
      dasslData->dasslJacobian == SYMJAC)
   {
@@ -1283,13 +1284,33 @@ static int callJacobian(double *t, double *y, double *yprime, double *deltaD, do
     _omc_matrix* jac = _omc_createMatrix(n, n, pd);
 
     /* get numerical jacobian -> dasslData->testJac */
-    jacA_num(t, y, yprime, deltaD, dasslData->testJac, cj, h, wt, rpar, ipar);
+    if (data->callback->functionJacA_column != NULL){
+      jacA_sym(t, y, yprime, deltaD, dasslData->testJac, cj, h, wt, rpar, ipar);
+    }else {
+      jacA_num(t, y, yprime, deltaD, dasslData->testJac, cj, h, wt, rpar, ipar);
+    }
+
+    if (ACTIVE_STREAM(LOG_JAC)){
+      _omc_printMatrix(diffJac, "Test Jac Numerical:", LOG_JAC);
+    }
 
     /* compare the selected jacobian and the numerical */
     diffJac = _omc_subtractMatrixMatrix(diffJac, jac);
     matError = _omc_maximumMatrixNorm(diffJac);
-    if (matError > 0.1)
-      infoStreamPrint(LOG_STDOUT, 0, "error between the selected and then numerical jacobian = %f", matError);
+    if (matError > 0.1) {
+      if (data->callback->functionJacA_column != NULL){
+        infoStreamPrint(LOG_STDOUT, 0, "error between the selected and the symbolical jacobian = %f", matError);
+      }else {
+        infoStreamPrint(LOG_STDOUT, 0, "error between the selected and the numerical jacobian = %f", matError);
+      }
+
+      /* debug */
+      if (ACTIVE_STREAM(LOG_JAC)){
+        _omc_printMatrix(diffJac, "Diff Matrix:", LOG_JAC);
+      }
+    }
+    _omc_destroyMatrix(diffJac);
+    _omc_destroyMatrix(jac);
   }
 
   int i,j = 0;
