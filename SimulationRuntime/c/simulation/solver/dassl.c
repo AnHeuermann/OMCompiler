@@ -1297,7 +1297,7 @@ static int callJacobian(double *t, double *y, double *yprime, double *deltaD, do
     /* compare the selected jacobian and the numerical */
     diffJac = _omc_subtractMatrixMatrix(diffJac, jac);
     matError = _omc_maximumMatrixNorm(diffJac);
-    if (matError > 0.1) {
+    if (matError < 0.1) {
       if (data->callback->functionJacA_column != NULL){
         infoStreamPrint(LOG_STDOUT, 0, "error between the selected and the symbolical jacobian = %f", matError);
       }else {

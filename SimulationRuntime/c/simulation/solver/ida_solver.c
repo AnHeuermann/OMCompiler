@@ -2242,10 +2242,7 @@ static int jacobianSparseADOLCColored(double tt, double cj,
   SlsSetToZero(Jac);
 
   /* tick */
-  if(measure_time_flag)
-  {
-    rt_tick(SIM_TIMER_JACOBIAN);
-  }
+  rt_tick(SIM_TIMER_JACOBIAN);
 
   for(i=0; i < omcJac->sparsePattern.maxColors; i++)
   {
