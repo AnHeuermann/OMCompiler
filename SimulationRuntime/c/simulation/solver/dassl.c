@@ -1280,11 +1280,13 @@ static int callJacobian(double *t, double *y, double *yprime, double *deltaD, do
   {
     int n = dasslData->N;
     double matError;
+    int symJac = 0;
     _omc_matrix* diffJac = _omc_createMatrix(n, n, dasslData->testJac);
     _omc_matrix* jac = _omc_createMatrix(n, n, pd);
 
     /* get numerical jacobian -> dasslData->testJac */
-    if (data->callback->functionJacA_column != NULL){
+    if (data->callback->functionJacA_column(data, threadData) == 0){
+      symJac = 1;
       jacA_sym(t, y, yprime, deltaD, dasslData->testJac, cj, h, wt, rpar, ipar);
     }else {
       jacA_num(t, y, yprime, deltaD, dasslData->testJac, cj, h, wt, rpar, ipar);
@@ -1297,8 +1299,8 @@ static int callJacobian(double *t, double *y, double *yprime, double *deltaD, do
     /* compare the selected jacobian and the numerical */
     diffJac = _omc_subtractMatrixMatrix(diffJac, jac);
     matError = _omc_maximumMatrixNorm(diffJac);
-    if (matError < 0.1) {
-      if (data->callback->functionJacA_column != NULL){
+    if (matError > 1) {
+      if (symJac){
         infoStreamPrint(LOG_STDOUT, 0, "error between the selected and the symbolical jacobian = %f", matError);
       }else {
         infoStreamPrint(LOG_STDOUT, 0, "error between the selected and the numerical jacobian = %f", matError);
