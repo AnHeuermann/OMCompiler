@@ -1439,7 +1439,7 @@ algorithm
 
       // res = abs(res)
       result = OPERAND_VAR(resVar);
-      operation = OPERATION({OPERAND_VAR(resVar)}, UNARY_VERB_CALL("abs_val"), OPERAND_VAR(resVar));
+      operation = OPERATION({OPERAND_VAR(resVar), OPERAND_CONST(DAE.RCONST(1))}, UNARY_VERB_CALL("abs_val"), OPERAND_VAR(resVar));
 
       workingArgs.tmpIndex = tmpIndex;
       ops = operation::ops;
