@@ -1475,8 +1475,8 @@ algorithm
     // smooth
     case (DAE.CALL(path=Absyn.IDENT("smooth")))
       equation
-        _::opds = opds;
-     then (inExp, (opds, ops, workingArgs));
+        opd1::_::opds = opds;
+     then (inExp, (opd1::opds, ops, workingArgs));
 
     // sum
     case (DAE.CALL(path=Absyn.IDENT("sum"), expLst={e1}))
