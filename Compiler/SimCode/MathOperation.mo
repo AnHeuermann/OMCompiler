@@ -213,6 +213,7 @@ protected
   OperationData tmpOpData;
   list<OperationData> opDataFuncs, opDataNLS;
   constant Boolean debug = false;
+  Integer totalParameterNum;
 algorithm
   try
     workingArgs := WORKINGSTATEARGS(crefToSimVarHT, {}, {}, {}, numRealVariables, numRealVariables, numRealDiscreteVariables, numIntVariables, numBoolVariables, listLength(realParameters), listLength(intParameters), listLength(boolParameters), numExtObjects, numRelations);
@@ -236,7 +237,10 @@ algorithm
     end if;
 
     // create needed nls systems
-    (opDataNLS, workingArgs) := createOperationDataNLS(workingArgs.nlsSystems, modelName, listAppend(listAppend(realParameters, intParameters), boolParameters), workingArgs, functionTree);
+    totalParameterNum := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters)+
+                                   numRealDiscreteVariables+numIntVariables+numBoolVariables+numExtObjects+numRelations
+                                   /* start values ->  */ + numRealVariables+numRealDiscreteVariables ;
+    (opDataNLS, workingArgs) := createOperationDataNLS(workingArgs.nlsSystems, modelName, listAppend(listAppend(realParameters, intParameters), boolParameters), totalParameterNum, workingArgs, functionTree);
 
     if debug then
       print("\ncreateOperationData for functions: \n");
@@ -251,9 +255,7 @@ algorithm
     tmpOpData := setInDepAndDepVars(independents, dependents, tmpOpData);
 
     tmpOpData.name := modelName;
-    tmpOpData.totalNumParameters := 1+listLength(realParameters)+listLength(intParameters)+listLength(boolParameters)+
-                                   numRealDiscreteVariables+numIntVariables+numBoolVariables+numExtObjects+numRelations
-                                   + numRealVariables+numRealDiscreteVariables;
+    tmpOpData.totalNumParameters := totalParameterNum;
     tmpOpData.extFuncNames := createExternalFunctionData( workingArgs.extFuncNames, functionTree, simFunctions);
 
     if debug then
@@ -406,6 +408,7 @@ protected function createOperationDataNLS
   input list<SimCode.NonlinearSystem> nlsSysts;
   input String modelName;
   input list<SimCodeVar.SimVar> simVarParams;
+  input Integer totalParameterNum;
   input WorkingStateArgs inWorkingStateArgs;
   input DAE.FunctionTree functionTree;
   output list<OperationData> outOperationData = {};
@@ -467,7 +470,7 @@ algorithm
     crefExps := list(Expression.crefToExp(cr) for cr in nlsSyst.inputCrefs);
     inputSimVars := SimCodeUtil.createTempVarsforCrefs(crefExps, {});
     inputSimVars := List.map1(inputSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
-    inputSimVars := SimCodeUtil.rewriteIndex(inputSimVars, listLength(simVarParams));
+    inputSimVars := SimCodeUtil.rewriteIndex(inputSimVars, totalParameterNum);
     if debug then
       SimCodeUtil.dumpVarLst(inputSimVars, "inputs SimVars");
       SimCodeUtil.dumpVarLst(simVarParams, "parameters SimVars");
@@ -500,13 +503,13 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
     numVars := listLength(iterationSimVars)+listLength(resSimVars)+listLength(innerSimVars);    
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+listLength(simVarParams)+listLength(inputSimVars), 0, 0, 0, 0);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+totalParameterNum+listLength(inputSimVars), 0, 0, 0, 0);
 
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
     // set dep and indep  
     optData := setInDepAndDepVars(iterationSimVars, resSimVars, optData);
-    optData.totalNumParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
+    optData.totalNumParameters := 1+totalParameterNum+listLength(inputSimVars);
     // set op data name
     optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_1";
   
@@ -519,7 +522,7 @@ algorithm
 
     // set dep and indep
     optData := setInDepAndDepVars(iterationSimVars, innerSimVars, optData);
-    optData.totalNumParameters := 1+listLength(simVarParams)+listLength(inputSimVars);
+    optData.totalNumParameters := 1+totalParameterNum+listLength(inputSimVars);
     // set op data name
     optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_3";
 
@@ -538,7 +541,7 @@ algorithm
     
     // y -> params
     iterationSimVars := List.map1(iterationSimVars, SimCodeUtil.setSimVarKind, BackendDAE.PARAM());
-    iterationSimVars := SimCodeUtil.rewriteIndex(iterationSimVars, listLength(simVarParams));
+    iterationSimVars := SimCodeUtil.rewriteIndex(iterationSimVars, totalParameterNum);
 
     localHT := List.fold(simVarParams, SimCodeUtil.addSimVarToHashTable, localHT);
     localHT := List.fold(iterationSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
@@ -551,13 +554,13 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
     
     numVars := listLength(inputSimVars)+listLength(resSimVars)+listLength(innerSimVars);
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+listLength(simVarParams)+listLength(iterationSimVars), 0, 0, 0, 0);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+totalParameterNum+listLength(iterationSimVars), 0, 0, 0, 0);
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
     // set dep and indep  
     optData := setInDepAndDepVars(inputSimVars, listAppend(resSimVars,innerSimVars), optData);
-    optData.totalNumParameters := 1+listLength(simVarParams)+listLength(iterationSimVars);
+    optData.totalNumParameters := 1+totalParameterNum+listLength(iterationSimVars);
     // set op data name
     optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_2";
   
