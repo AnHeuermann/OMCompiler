@@ -1293,23 +1293,24 @@ static int callJacobian(double *t, double *y, double *yprime, double *deltaD, do
     }
 
     if (ACTIVE_STREAM(LOG_JAC)){
-      _omc_printMatrix(diffJac, "Test Jac Numerical:", LOG_JAC);
+      _omc_printMatrix(diffJac, "Test Jac:", LOG_JAC);
     }
 
     /* compare the selected jacobian and the numerical */
     diffJac = _omc_subtractMatrixMatrix(diffJac, jac);
     matError = _omc_maximumMatrixNorm(diffJac);
-    if (matError > 1) {
+    if (matError > *h) {
       if (symJac){
-        infoStreamPrint(LOG_STDOUT, 0, "error between the selected and the symbolical jacobian = %f", matError);
+        infoStreamPrint(LOG_STDOUT, 0, "Error in the selected Jacobian matrix vs the symbolical jacobian: %f > %f (step-size)", matError, *h);
       }else {
-        infoStreamPrint(LOG_STDOUT, 0, "error between the selected and the numerical jacobian = %f", matError);
+        infoStreamPrint(LOG_STDOUT, 0, "EError in the selected Jacobian matrix vs the numerical jacobian: %f > %f (step-size)", matError, *h);
       }
 
       /* debug */
       if (ACTIVE_STREAM(LOG_JAC)){
         _omc_printMatrix(diffJac, "Diff Matrix:", LOG_JAC);
       }
+      //exit(0);
     }
     _omc_destroyMatrix(diffJac);
     _omc_destroyMatrix(jac);
@@ -1356,6 +1357,7 @@ static int JacobianADOLC(double *t, double *y, double *yprime, double *deltaD, d
   set_param_vec(data->simulationInfo->adolcTag, dasslData->adolcNumParam, dasslData->adolcParam);
 
   //printTapeStats(stderr, data->simulationInfo->adolcTag);
+  //tape_doc(data->simulationInfo->adolcTag, dasslData->N, dasslData->N, y, dasslData->ypsave);
   jacobian(data->simulationInfo->adolcTag, dasslData->N, dasslData->N, y, dasslData->adolcJac);
 
   k = 0;
