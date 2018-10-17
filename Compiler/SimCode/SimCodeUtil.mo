@@ -287,6 +287,7 @@ protected
 
   SimCode.OMSIFunction omsiInitEquations, omsiSimEquations;
   Option<SimCode.OMSIData> omsiOptData;
+  list<tuple<Integer, Integer>> mapAdolcAlgIndex;
 
   constant Boolean debug = false;
 
@@ -527,11 +528,12 @@ algorithm
     removedInitialEquations := List.map(removedInitialEquations, addDivExpErrorMsgtoSimEqSystem);
     if debug then execStat("simCode: addDivExpErrorMsgtoSimEqSystem"); end if;
 
-
-    // TODO: fix this ugly hack, allEquation and odeEquation are different system
-    // what is really annoying!
-    (allEquations, adolcIndex) := setAdolcIndexLinSysts(allEquations);
-    allEquations := setAdolcIndexNonLinSysts(allEquations, adolcIndex);
+    // set algebraic loops adolc index
+    if  Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then
+      (odeEquations,adolcIndex, mapAdolcAlgIndex) := setAdolcIndexSystList(odeEquations, 0, true, {});
+      (odeEquations, adolcIndex, mapAdolcAlgIndex) := setAdolcIndexSystList(odeEquations, adolcIndex, false, mapAdolcAlgIndex);
+      allEquations := mapAdolcAlgIndexToAllEqns(allEquations, mapAdolcAlgIndex);
+    end if;
 
     // collect all LinearSystem and NonlinearSystem algebraic system in modelInfo and update
     // the corresponding index (indexNonLinear, indexLinear) in SES_NONLINEAR and SES_LINEAR
@@ -627,8 +629,11 @@ algorithm
     // create model operation data for adolc
     if  Flags.getConfigBool(Flags.GEN_ADOLC_TRACE) then
       tmpSimVars := modelInfo.vars;
-      (odeEquations,adolcIndex) := setAdolcIndexSystList(odeEquations);
-      odeEquations := setAdolcIndexSystList(odeEquations, adolcIndex, false);
+      /*
+      (odeEquations,adolcIndex, mapAdolcAlgIndex) := setAdolcIndexSystList(odeEquations, 0, true, {});
+      (odeEquations, adolcIndex, mapAdolcAlgIndex) := setAdolcIndexSystList(odeEquations, adolcIndex, false, mapAdolcAlgIndex);
+      allEquations := mapAdolcAlgIndexToAllEqns(allEquations, mapAdolcAlgIndex);
+      */
       modelOperationData := MathOperation.createOperationData(List.flatten(odeEquations),
                                                               crefToSimVarHT, 2*modelInfo.varInfo.numStateVars+modelInfo.varInfo.numAlgVars,
                                                               modelInfo.varInfo.numDiscreteReal, modelInfo.varInfo.numIntAlgVars, modelInfo.varInfo.numBoolAlgVars,
@@ -1272,18 +1277,20 @@ protected function setAdolcIndexSystList "
   updates Adolc index of strong components systems"
   input list<list<SimCode.SimEqSystem>> inEqns;
   input Integer inAdolcIndex = 0;
-  input Boolean systLinear = true; 
+  input Boolean systLinear = true;
+  input list<tuple<Integer, Integer>> inMapIndex;
   output list<list<SimCode.SimEqSystem>> outEqns = {};
   output Integer outAdolcIndex = inAdolcIndex;
+  output list<tuple<Integer, Integer>> mapIndex = inMapIndex;
 protected
   SimCode.SimEqSystem syst;
   list<SimCode.SimEqSystem> systList;
 algorithm
   for eqs in inEqns loop
     if systLinear then
-      (systList,outAdolcIndex) := setAdolcIndexLinSysts(eqs, outAdolcIndex);
+      (systList,outAdolcIndex, mapIndex) := setAdolcIndexLinSysts(eqs, outAdolcIndex, mapIndex);
     else
-      (systList,outAdolcIndex) := setAdolcIndexNonLinSysts(eqs, outAdolcIndex);
+      (systList,outAdolcIndex, mapIndex) := setAdolcIndexNonLinSysts(eqs, outAdolcIndex, mapIndex);
     end if;
 		outEqns := systList::outEqns;
   end for;
@@ -1294,8 +1301,10 @@ protected function setAdolcIndexLinSysts "
   updates Adolc index of strong components systems"
   input list<SimCode.SimEqSystem> inEqns;
   input Integer inAdolcIndex = 0;
+  input list<tuple<Integer, Integer>> inMapIndex;
   output list<SimCode.SimEqSystem> outEqns = {};
   output Integer outAdolcIndex = inAdolcIndex;
+  output list<tuple<Integer, Integer>> mapIndex = inMapIndex;
 protected
   SimCode.SimEqSystem syst;
 algorithm
@@ -1311,6 +1320,7 @@ algorithm
         equation
           outAdolcIndex = outAdolcIndex+1;
           lSystem.adolcIndex = outAdolcIndex-1;
+          mapIndex = (lSystem.index, lSystem.adolcIndex)::mapIndex;
       then SimCode.SES_LINEAR(lSystem, alternativeTearing, eqAttr);
 
       else
@@ -1325,8 +1335,10 @@ protected function setAdolcIndexNonLinSysts "
   updates Adolc index of strong components systems"
   input list<SimCode.SimEqSystem> inEqns;
   input Integer inAdolcIndex = 0;
+  input list<tuple<Integer, Integer>> inMapIndex;
   output list<SimCode.SimEqSystem> outEqns = {};
   output Integer outAdolcIndex = inAdolcIndex;
+  output list<tuple<Integer, Integer>> mapIndex = inMapIndex;
 protected
   SimCode.SimEqSystem syst;
 algorithm
@@ -1345,6 +1357,8 @@ algorithm
 
       // no dynamic tearing
       case (SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs, inputCrefs, sysIndex, nUnknowns, optSymJac, homotopySupport, mixedSystem, tornSystem, _), NONE(), eqAttr))
+        equation
+        mapIndex = (index, outAdolcIndex)::mapIndex;
       then SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs, inputCrefs, sysIndex, nUnknowns, optSymJac, homotopySupport, mixedSystem, tornSystem, outAdolcIndex), NONE(), eqAttr);
 
       else
@@ -1355,6 +1369,69 @@ algorithm
   outAdolcIndex := outAdolcIndex+1;
   outEqns := listReverse(outEqns);
 end setAdolcIndexNonLinSysts;
+
+protected function mapAdolcAlgIndexToAllEqns
+  input list<SimCode.SimEqSystem> inEqns;
+  input list<tuple<Integer, Integer>> inMapIndex;
+  output list<SimCode.SimEqSystem> outEqns = {};
+protected
+  list<tuple<Integer, Integer>> mapIndex, tmp;
+  tuple<Integer, Integer> head;
+  SimCode.SimEqSystem syst;
+algorithm
+  // sort inMapIndex
+  mapIndex := List.sort(inMapIndex, Util.compareTupleIntGt);
+
+  // loop on equations
+  for eq in inEqns loop
+     tmp := List.firstOrEmpty(mapIndex);
+     if listEmpty(tmp) then
+       outEqns := eq::outEqns;
+       continue;
+     else
+      {head} := tmp;
+     end if;
+
+     syst := matchcontinue(eq)
+      local
+        BackendDAE.EquationAttributes eqAttr;
+        SimCode.LinearSystem lSystem;
+        Option<SimCode.LinearSystem> alternativeTearing;
+        Integer adolcIndex;
+        Integer index, sysIndex;
+        list<SimCode.SimEqSystem> eqs;
+        list<DAE.ComponentRef> crefs, inputCrefs, innerCrefs;
+        Option<SimCode.JacobianMatrix> optSymJac;
+        Boolean homotopySupport;
+        Boolean mixedSystem;
+        Boolean tornSystem;
+        Integer nUnknowns;
+        BackendDAE.EquationAttributes eqAttr;
+
+      // no dynamic tearing
+      case (SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs,
+              inputCrefs, sysIndex, nUnknowns, optSymJac, homotopySupport, mixedSystem, tornSystem, _), NONE(), eqAttr))
+           guard (simEqSystemIndex(eq) == Util.tuple21(head))
+      equation
+        adolcIndex = Util.tuple22(head);
+        _::mapIndex = mapIndex;
+      then SimCode.SES_NONLINEAR(SimCode.NONLINEARSYSTEM(index, eqs, crefs, innerCrefs, inputCrefs, sysIndex, nUnknowns, optSymJac, homotopySupport, mixedSystem, tornSystem, adolcIndex), NONE(), eqAttr);
+
+      case (SimCode.SES_LINEAR(lSystem=lSystem, alternativeTearing=alternativeTearing, eqAttr=eqAttr))
+        guard (simEqSystemIndex(eq) == Util.tuple21(head))
+      equation
+        adolcIndex = Util.tuple22(head);
+        lSystem.adolcIndex = adolcIndex;
+        _::mapIndex = mapIndex;
+      then SimCode.SES_LINEAR(lSystem, alternativeTearing, eqAttr);
+
+      else
+      then eq;
+    end matchcontinue;
+    outEqns := syst::outEqns;
+  end for;
+  outEqns := listReverse(outEqns);
+end mapAdolcAlgIndexToAllEqns;
 
 protected function updateNonLinearSyst
 "Helper function of addAlgebraicLoopsModelInfo
