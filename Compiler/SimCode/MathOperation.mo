@@ -1500,7 +1500,7 @@ algorithm
     // delay
     case (DAE.CALL(path=Absyn.IDENT("delay")))
       equation
-        _::opd1::_::_::opds = opds;
+        _::_::opd1::_::opds = opds;
     then (inExp, (opd1::opds, ops, workingArgs));
 
     // sample
@@ -1509,10 +1509,10 @@ algorithm
         _::_::opds = opds;
     then (inExp, (opds, ops, workingArgs));
 
-    // semiLinear: if x>=0 then a*x else b*x
+    // semiLinear(x,a,b): if x>=0 then a*x else b*x
     case (DAE.CALL(path=Absyn.IDENT("semiLinear"), attr=DAE.CALL_ATTR(ty=ty)))
       equation
-        opd1::opd2::opd3::opds = opds;
+        opd3::opd2::opd1::opds = opds;
 
         (operation, opd2, tmpIndex) = createBinaryOperation(DAE.MUL(ty), {opd1, opd2}, workingArgs.tmpIndex);
         ops = operation::ops;
