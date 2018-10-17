@@ -1303,7 +1303,7 @@ static int callJacobian(double *t, double *y, double *yprime, double *deltaD, do
       if (symJac){
         infoStreamPrint(LOG_STDOUT, 0, "Error in the selected Jacobian matrix vs the symbolical jacobian: %f > %f (step-size)", matError, *h);
       }else {
-        infoStreamPrint(LOG_STDOUT, 0, "EError in the selected Jacobian matrix vs the numerical jacobian: %f > %f (step-size)", matError, *h);
+        infoStreamPrint(LOG_STDOUT, 0, "Error in the selected Jacobian matrix vs the numerical jacobian: %f > %f (step-size)", matError, *h);
       }
 
       /* debug */
