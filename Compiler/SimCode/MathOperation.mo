@@ -503,13 +503,13 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
 
     numVars := listLength(iterationSimVars)+listLength(resSimVars)+listLength(innerSimVars);    
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+totalParameterNum+listLength(inputSimVars), 0, 0, 0, 0);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, totalParameterNum+listLength(inputSimVars), 0, 0, 0, 0);
 
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
     // set dep and indep  
     optData := setInDepAndDepVars(iterationSimVars, resSimVars, optData);
-    optData.totalNumParameters := 1+totalParameterNum+listLength(inputSimVars);
+    optData.totalNumParameters := totalParameterNum+listLength(inputSimVars);
     // set op data name
     optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_1";
   
@@ -522,7 +522,7 @@ algorithm
 
     // set dep and indep
     optData := setInDepAndDepVars(iterationSimVars, innerSimVars, optData);
-    optData.totalNumParameters := 1+totalParameterNum+listLength(inputSimVars);
+    optData.totalNumParameters := totalParameterNum+listLength(inputSimVars);
     // set op data name
     optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_3";
 
@@ -554,13 +554,13 @@ algorithm
     localHT := List.fold(innerSimVars, SimCodeUtil.addSimVarToHashTable, localHT);
     
     numVars := listLength(inputSimVars)+listLength(resSimVars)+listLength(innerSimVars);
-    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, 1+totalParameterNum+listLength(iterationSimVars), 0, 0, 0, 0);
+    workingArgs := WORKINGSTATEARGS(localHT, outWorkingStateArgs.funcNames, outWorkingStateArgs.extFuncNames, {}, numVars, numVars, 0, 0, 0, totalParameterNum+listLength(iterationSimVars), 0, 0, 0, 0);
         
     // create operation of the equations
     (optData, workingArgs) := createOperationEqns(nlsSyst.eqs, workingArgs, functionTree);
     // set dep and indep  
     optData := setInDepAndDepVars(inputSimVars, listAppend(resSimVars,innerSimVars), optData);
-    optData.totalNumParameters := 1+totalParameterNum+listLength(iterationSimVars);
+    optData.totalNumParameters := totalParameterNum+listLength(iterationSimVars);
     // set op data name
     optData.name := modelName + "_nls_" + intString(nlsSyst.adolcIndex) + "_2";
   
