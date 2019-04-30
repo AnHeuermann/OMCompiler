@@ -1188,14 +1188,17 @@ protected function setAdolcIndexSystList "
 protected
   SimCode.SimEqSystem syst;
   list<SimCode.SimEqSystem> systList;
+  list<list<SimCode.SimEqSystem>> inEqnsReverse;
 algorithm
-  for eqs in inEqns loop
+  inEqnsReverse := listReverse(inEqns);
+
+  for eqs in inEqnsReverse loop
     if systLinear then
       (systList,outAdolcIndex, mapIndex) := setAdolcIndexLinSysts(eqs, outAdolcIndex, mapIndex);
     else
       (systList,outAdolcIndex, mapIndex) := setAdolcIndexNonLinSysts(eqs, outAdolcIndex, mapIndex);
     end if;
-		outEqns := systList::outEqns;
+	outEqns := systList::outEqns;
   end for;
   outEqns := listReverse(outEqns);
 end setAdolcIndexSystList;
