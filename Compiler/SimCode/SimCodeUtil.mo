@@ -1200,7 +1200,6 @@ algorithm
     end if;
 	outEqns := systList::outEqns;
   end for;
-  outEqns := listReverse(outEqns);
 end setAdolcIndexSystList;
 
 protected function setAdolcIndexLinSysts "
