@@ -360,7 +360,7 @@ void printMatrixCSR(int* Ap, int* Ai, double* Ax, int n)
  * assumption:
  *          -nin == 2 and nout == 1
  *          -iArrlen == 2*nnz
- *
+ *alloc_adolc_lin_sol
  */
 int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *insz, double **x, int *outsz, double **y, void* ctx) {
   int nnz = insz[0];
@@ -379,7 +379,7 @@ int LinearSolverEdf::function(int iArrLen, int *iArr, int nin, int nout, int *in
       Map = (int*)calloc(nnz,sizeof(int));
       umfpack_di_triplet_to_col(nb,nx,nnz,rind,cind,x[0],Ap,Ai,A,Map);
   } else {
-      for (int p = 0 ; p < Ap [nb] ; p++) A [p] = 0 ;			//init. Data
+      for (int p = 0 ; p < Ap [nb] ; p++) A [p] = 0 ;       //init. Data
       for (int k = 0 ; k < nnz ; k++) A [Map [k]] += x[0][k] ;
   }
 
@@ -1265,11 +1265,11 @@ void initialize_linearSystems(DATA *data)
     LINEAR_SYSTEM_DATA *lsData = data->simulationInfo->linearSystemData;
     int i;
     unsigned int outIdx;
-        char filename[128];
+    char filename[128];
     for(i=0; i <data->modelData->nLinearSystems; i++)
     {
         if (lsData[i].adolcIndex>=0){
-                    sprintf(filename, "%s_ls_%ld_pat.txt", data->modelData->modelFilePrefix, lsData[i].adolcIndex);
+          sprintf(filename, "%s_ls_%ld_pat.txt", data->modelData->modelFilePrefix, lsData[i].adolcIndex);
           outIdx = alloc_adolc_lin_sol(filename, lsData[i].nnz, lsData[i].size, lsData[i].size);
           if (outIdx != lsData[i].adolcIndex){
               errorStreamPrint(LOG_STDOUT, 0, "ADOLC Linear System Index does not match! %u != %ld", outIdx, lsData[i].adolcIndex);

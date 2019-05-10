@@ -1276,14 +1276,14 @@ static int callJacobian(double *t, double *y, double *yprime, double *deltaD, do
     /* compare the selected jacobian and the numerical */
     diffJac = _omc_subtractMatrixMatrix(diffJac, jac);
     matError = _omc_maximumMatrixNorm(diffJac);
-    if (matError > *h) {
+    if (matError > 1e-2) { //Before:matError>*h; error tolerance between numerical and analytical jac
       if (symJac){
-        infoStreamPrint(LOG_STDOUT, 0, "Error in the selected Jacobian matrix vs the symbolical jacobian: %f > %f (step-size)", matError, *h);
+        warningStreamPrint(LOG_STDOUT, 0, "The selected Jacobian matrix (Maximum Norm) vs the symbolical jacobian: %f > %f (step-size)", matError, *h);
       }else {
-        infoStreamPrint(LOG_STDOUT, 0, "Error in the selected Jacobian matrix vs the numerical jacobian: %f > %f (step-size)", matError, *h);
+        warningStreamPrint(LOG_STDOUT, 0, "The selected Jacobian matrix (Maximum Norm) vs the numerical jacobian: %f > %f (step-size)", matError, *h);
       }
 
-      /* debug */
+      //debug
       if (ACTIVE_STREAM(LOG_JAC)){
         _omc_printMatrix(diffJac, "Diff Matrix:", LOG_JAC);
       }
