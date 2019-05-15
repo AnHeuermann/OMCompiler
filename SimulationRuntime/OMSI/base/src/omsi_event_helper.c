@@ -226,7 +226,7 @@ omsi_bool omsi_check_discrete_changes (omsi_t* omsi_data)
     pre_model_vars_and_params = omsi_data->sim_data->pre_vars;
 
     /* Compare all real discrete variables to pre variables */
-    for (i=start_discrete_real_vars; i<n_discrete_real_vars; i++) {
+    for (i=start_discrete_real_vars; i<n_discrete_real_vars+start_discrete_real_vars; i++) {
         if (fabs(model_vars_and_params->reals[i] - pre_model_vars_and_params->reals[i]) > 1e-8) {  /* ToDo: insert pre vars mapping */
             return omsi_true;
         }
