@@ -193,7 +193,7 @@ omsi_status omsi_event_update(osu_t*              OSU,
     /* Check for discrete changes */
     if (omsi_check_discrete_changes(OSU->osu_data) || eventInfo->newDiscreteStatesNeeded) {
         filtered_base_logger(global_logCategories, log_all, omsi_ok,
-                "fmi2EventUpdate:  Need to iterate(discrete changes)!");
+                "fmi2EventUpdate: Need to iterate(discrete changes)!");
         eventInfo->newDiscreteStatesNeeded = omsi_true;
         eventInfo->valuesOfContinuousStatesChanged = omsi_true;         /* ToDo: Is this correct? */
     } else {
@@ -212,11 +212,11 @@ omsi_status omsi_event_update(osu_t*              OSU,
      * in fmi2 import and export. This is an workaround,
      * since the iteration seem not starting.
      */
+#endif
 
     /* ToDo: enable, when preValues are implemented */
     /* omsu_storePreValues(OSU->osu_data); */
-    updateRelationsPre(OSU->old_data);
-#endif
+    omsu_update_pre_zero_crossings(OSU->osu_data->sim_data, OSU->osu_data->model_data->n_zerocrossings);
 
     /* Get Next Event Time */
     nextSampleEvent = omsi_compute_next_event_time(
@@ -230,9 +230,14 @@ omsi_status omsi_event_update(osu_t*              OSU,
         eventInfo->nextEventTime = nextSampleEvent;
     }
 
-    filtered_base_logger(global_logCategories, log_all, omsi_ok,
-            "fmi2EventUpdate: Checked for Sample Events! Next Sample Event %f",
+    if (eventInfo->nextEventTimeDefined) {
+        filtered_base_logger(global_logCategories, log_all, omsi_ok,
+            "fmi2EventUpdate: Checked for sample events! Next sample event %f",
             eventInfo->nextEventTime);
+    } else {
+        filtered_base_logger(global_logCategories, log_all, omsi_ok,
+            "fmi2EventUpdate: Checked for sample events! No next sample event defined.");
+    }
 
     return omsi_ok;
 
